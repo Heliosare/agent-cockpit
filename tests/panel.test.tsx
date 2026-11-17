@@ -450,7 +450,8 @@ test('résumé express : préparé d\'avance pour « À toi », le clic ne fait 
   const { ran, sent } = await lancer($, on)
   // Dès la collecte, qct a tourné pour les sessions qui t'attendent (a : t'attend, d : à relire), pas pour les autres.
   const qct = () => ran.filter(argv => argv[0] === '/bin/zsh')
-  expect(qct().map(a => a.at(-1)).sort()).toEqual(['cli-a', 'cli-d'])
+  // Et pour les sessions finies (c) : d'abord celles qui t'attendent, les plus récentes en tête.
+  expect(qct().map(a => a.at(-1))).toEqual(['cli-d', 'cli-a', 'cli-c'])
   expect(qct()[0]?.slice(0, 4)).toEqual(['/bin/zsh', '-lc', 'exec "$0" "$1"', '/chemin/qct'])
   const ui = await $.ui.mount(pane())
   expect((await ui.find({ key: 'qct-local_a' }))?.props.label).toBe('≡')
@@ -460,7 +461,7 @@ test('résumé express : préparé d\'avance pour « À toi », le clic ne fait 
   await ui.press({ key: 'qct-local_a' })
   expect(await ui.find({ type: 'Text', text: '📌 Bug prod : une question attend ta réponse.' })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: '🗂 Aucun dépôt git dans cette session' })).toBeTruthy()
-  expect(qct()).toHaveLength(2)
+  expect(qct()).toHaveLength(3)
   expect(sent).toEqual([])
   // Trier le garde, un second appui le replie.
   await ui.press({ key: 'tri-date' })
@@ -470,7 +471,7 @@ test('résumé express : préparé d\'avance pour « À toi », le clic ne fait 
   // Une session qui travaille : le clic le demande, à ce moment-là.
   await ui.press({ key: 'qct-local_b' })
   expect(qct().at(-1)?.at(-1)).toBe('cli-b')
-  expect(qct()).toHaveLength(3)
+  expect(qct()).toHaveLength(4)
   await ui.unmount()
 })
 

@@ -427,6 +427,14 @@ async function resumer($: EngineInterface, qct: string, s: Session): Promise<voi
 // ends, one at a time, once per turn: a press then only shows it.
 let preparation = false
 
+// Sessions whose summary is made in advance: those that wait for the person,
+// and those that are finished (a look back at what they did), for three days.
+const TROIS_JOURS = 3 * 86_400_000
+function resumeAvance(s: Session, maintenant: number): boolean {
+  const g = etatSession(s).groupe
+  return g === 'toi' || (g === 'fini' && !!s.activite && maintenant - s.activite < TROIS_JOURS)
+}
+
 async function preparerResumes($: EngineInterface, data: Snapshot): Promise<void> {
   if (preparation || !data.qct) return
   preparation = true
@@ -441,7 +449,11 @@ async function preparerResumes($: EngineInterface, data: Snapshot): Promise<void
         return {}
       }
     }
-    const aFaire = data.sessions.filter(s => etatSession(s).groupe === 'toi' && s.cli && s.activite)
+    const debut = await $.clock.now()
+    // What waits for the person first, then what is finished, the most recent first.
+    const aFaire = data.sessions
+      .filter(s => s.cli && s.activite && resumeAvance(s, debut))
+      .sort((a, b) => Number(etatSession(a).groupe !== 'toi') - Number(etatSession(b).groupe !== 'toi') || (b.activite ?? 0) - (a.activite ?? 0))
     let cache = await lire()
     await update($, fiches, () => cache)
     for (const s of aFaire) {
@@ -475,7 +487,7 @@ async function oublierResume($: EngineInterface, id: string): Promise<void> {
   await update($, vue, (v: Vue) => {
     const resumes = { ...(v.resumes ?? {}) }
     delete resumes[id]
-    return { ...VUE_DEFAUT, ...v, resumes }
+    return { ...VUE_DEFAUT, ...v, resumes, ouverts: (v.ouverts ?? []).filter(i => i !== id) }
   })
 }
 
@@ -967,10 +979,15 @@ export const register: Register = on => {
     // or the one asked by a press.
     const fichesPretes = await read($, fiches)
     const resumeAffiche = (s: Session): Resume | undefined => {
-      if (!(v.ouverts ?? []).includes(s.id)) return resumes[s.id]
+      if (resumes[s.id] || !(v.ouverts ?? []).includes(s.id)) return resumes[s.id]
       const f = (fichesPretes ?? {})[s.id]
-      if (!f || f.etat === 'en cours' || f.activite !== s.activite) return { etat: 'en cours', texte: '' }
-      return { etat: f.etat, texte: f.texte }
+      // The last summary made, even from before its latest turn, rather than a wait.
+      if (f && f.etat !== 'en cours') {
+        const ancien = f.activite !== s.activite ? '\n(résumé d’avant son dernier tour, le nouveau se prépare)' : ''
+        return { etat: f.etat, texte: f.etat === 'pret' && ancien && resumeAvance(s, maintenantVue) ? f.texte + ancien : f.texte }
+      }
+      if (resumeAvance(s, maintenantVue)) return { etat: 'en cours', texte: '' }
+      return resumes[s.id]
     }
 
     const partsSession = (s: Session) => ({
@@ -991,8 +1008,9 @@ export const register: Register = on => {
                 G.resume,
                 'Résumé express (qct)',
                 () => {
-                  // A session that waits for the person has its summary ready: the press only shows it.
-                  if (etatSession(s).groupe === 'toi') {
+                  // A session that waits for the person, or is finished, has its summary
+                  // made in advance: the press only shows it.
+                  if (resumeAvance(s, maintenantVue)) {
                     return update($, vue, (x: Vue) => {
                       const ouverts = x.ouverts ?? []
                       return { ...VUE_DEFAUT, ...x, ouverts: ouverts.includes(s.id) ? ouverts.filter(i => i !== s.id) : [...ouverts, s.id] }
