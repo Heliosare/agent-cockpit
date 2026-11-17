@@ -1,5 +1,6 @@
 """Règles de classement du collecteur. Lancer : python3 tests/test_collect.py"""
 import importlib.util
+import json
 import os
 import unittest
 
@@ -154,6 +155,28 @@ class Classement(unittest.TestCase):
         ])
         self.assertEqual(collect.fichiers_garde(journal), [{"fichier": "decision-x", "changements": 2}, {"fichier": "autre", "changements": 1}])
         self.assertEqual(collect.detail_garde({}, "12"), {"etat": "echec", "fichiers": []})
+
+    def test_un_tour_en_cours_se_voit_dans_la_transcription(self):
+        import tempfile, time as t
+        maintenant = t.time() * 1000
+        with tempfile.TemporaryDirectory() as dossier:
+            chemin = os.path.join(dossier, "cli.jsonl")
+            def ecrire(*entrees):
+                open(chemin, "w").write("\n".join(json.dumps(e) for e in entrees) + "\n")
+            d = session("review_ready", 60_000, cliSessionId="cli", frais=False)
+            d["lastTurnEdgeAt"] = d["lastActivityAt"]
+            trouve = lambda cli: [chemin]
+            # Un outil lancé, sans réponse encore : la session travaille.
+            ecrire({"type": "user", "message": {"content": "vas-y"}},
+                   {"type": "assistant", "message": {"stop_reason": "tool_use", "content": [{"type": "tool_use"}]}},
+                   {"type": "custom-title"})
+            self.assertEqual(collect.classer_session(d, maintenant, trouve)["etat"], "travaille")
+            # Le tour est fini : elle ne travaille plus.
+            ecrire({"type": "assistant", "message": {"stop_reason": "end_turn", "content": [{"type": "text"}]}})
+            self.assertNotEqual(collect.classer_session(d, maintenant, trouve)["etat"], "travaille")
+            # Un tour interrompu ne compte pas.
+            ecrire({"type": "user", "message": {"content": [{"type": "text", "text": "[Request interrupted by user]"}]}})
+            self.assertNotEqual(collect.classer_session(d, maintenant, trouve)["etat"], "travaille")
 
 
 if __name__ == "__main__":

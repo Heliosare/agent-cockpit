@@ -87,7 +87,58 @@ def est_ancien(ms, now, jours):
     return bool(ms) and now - ms > jours * JOUR
 
 
-def classer_session(d, now):
+def dernier_echange(chemin, octets=262144):
+    """La dernière entrée « user » ou « assistant » d'une transcription (.jsonl), lue depuis la fin du fichier."""
+    try:
+        with open(chemin, "rb") as f:
+            f.seek(0, 2)
+            taille = f.tell()
+            f.seek(max(0, taille - octets))
+            lignes = f.read().decode("utf-8", "replace").splitlines()
+    except Exception:
+        return None
+    for ligne in reversed(lignes):
+        if '"user"' not in ligne and '"assistant"' not in ligne:
+            continue
+        try:
+            x = json.loads(ligne)
+        except Exception:
+            continue
+        if x.get("type") in ("user", "assistant"):
+            return x
+    return None
+
+
+def tour_en_cours(d, now, transcriptions=None):
+    """Vrai si la session est au milieu d'un tour : sa transcription finit sur un appel d'outil sans
+    réponse, ou sur un message auquel Claude n'a pas encore répondu, et a bougé il y a moins de 30 min.
+    (Un long outil ne bouge pas le reste du fichier de la session : seul ce signe le voit.)"""
+    cli = d.get("cliSessionId")
+    if not cli:
+        return False
+    chemins = transcriptions(cli) if transcriptions else glob.glob(os.path.join(HOME, ".claude", "projects", "*", f"{cli}.jsonl"))
+    for chemin in chemins:
+        try:
+            if now - os.path.getmtime(chemin) * 1000 > 30 * 60 * 1000:
+                continue
+        except Exception:
+            continue
+        x = dernier_echange(chemin)
+        if not x:
+            continue
+        m = x.get("message") or {}
+        if x.get("type") == "assistant":
+            if m.get("stop_reason") in ("tool_use", None):
+                return True
+        else:
+            c = m.get("content")
+            texte = c if isinstance(c, str) else " ".join(str(b.get("text", "")) for b in (c or []) if isinstance(b, dict))
+            if "Request interrupted" not in texte:
+                return True
+    return False
+
+
+def classer_session(d, now, transcriptions=None):
     """Une session de l'app -> ce que le panneau en montre (champs choisis, jamais le fichier brut)."""
     act = d.get("lastActivityAt") or 0
     edge = d.get("lastTurnEdgeAt") or 0
@@ -95,7 +146,7 @@ def classer_session(d, now):
     # Un résumé qui ne porte pas sur le dernier message ne dit plus rien de l'état.
     fresh = d.get("postTurnSummaryFor") == d.get("lastAssistantUuid")
     cat = s.get("status_category") if fresh else None
-    if act > edge + 1500 and now - act < 15 * 60 * 1000:
+    if (act > edge + 1500 and now - act < 15 * 60 * 1000) or tour_en_cours(d, now, transcriptions):
         etat = "travaille"
     elif cat == "blocked" or d.get("interruptedAwaitingPerson"):
         etat = "attend toi"
