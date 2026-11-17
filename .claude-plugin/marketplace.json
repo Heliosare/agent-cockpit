@@ -1,0 +1,12 @@
+{
+  "name": "flybuddy-panel",
+  "owner": { "name": "Heliosare" },
+  "metadata": { "description": "Un panneau pour Claude Code : sessions Claude et PR GitHub triées par priorité, tâches répétitives, serveurs locaux." },
+  "plugins": [
+    {
+      "name": "flybuddy-panel",
+      "source": "./",
+      "description": "Un panneau à côté du chat : sessions Claude et PR GitHub triées par priorité, tâches répétitives, serveurs locaux"
+    }
+  ]
+}
