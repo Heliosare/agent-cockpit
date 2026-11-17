@@ -91,7 +91,10 @@ export type Snapshot = {
 }
 
 /** Ce qu'un bouton demande à Claude : un texte à trous, voir CONSIGNES_DEFAUT. */
-export type Consignes = { tester?: string; merger?: string; lancer?: string }
+export type Consignes = { tester?: string; merger?: string; lancer?: string; ok?: string }
+
+/** Ce que la garde reproche à une PR : les fichiers de tests touchés, et combien de changements dans chacun. */
+export type DetailGarde = { etat: 'en cours' | 'pret' | 'echec'; fichiers: { fichier: string; changements: number }[] }
 
 /** Le résumé express d'une session, demandé depuis sa ligne. */
 export type Resume = { etat: 'en cours' | 'pret' | 'echec'; texte: string }
@@ -110,6 +113,10 @@ export type Vue = {
   tri: Tri
   /** Les résumés express affichés, par identifiant de session. */
   resumes: Record<string, Resume>
+  /** La PR dont on confirme l'approbation (bouton du label « labelOk »), avec ce que la garde lui reproche. */
+  confirmeOk: { numero: number; detail: DetailGarde } | null
+  /** Les PR dont l'approbation a été demandée à Claude, avec l'heure de la demande (ms). */
+  okDemande: Record<number, number>
   /** Les piles arrêtées sont dépliées sous « Localhost ». */
   pilesArretees: boolean
   /** Les PR dont le merge vient d'être demandé, avec l'heure de la demande (ms). */

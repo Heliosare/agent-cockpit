@@ -80,7 +80,7 @@ Au premier lancement, le panneau pose `~/.claude/flybuddy-panel/config.json`. Le
 | `rafraichirSecondes`, `prsSecondes` | Le rythme : les sessions et les serveurs toutes les 30 s, GitHub toutes les 90 s. |
 | `taches` | Tes boutons : `court` (le texte du bouton), `libelle` (son nom complet) et `texte` (la consigne envoyée à Claude). |
 | `piles` | Les serveurs locaux à toujours montrer : `nom`, `port`, et soit `lanceur` (son nom dans `~/.claude/launch.json`), soit `dossier` et `commande`. Ceux de `launch.json` qui tournent s'ajoutent tout seuls. |
-| `consignes` | Pour réécrire ce que les boutons demandent à Claude : `tester`, `merger` et `lancer`. |
+| `consignes` | Pour réécrire ce que les boutons demandent à Claude : `tester`, `merger`, `lancer` et `ok`. |
 | `qct` | Le chemin d'un script de résumé (voir plus bas), ou `false` pour s'en passer. |
 
 Un exemple (voir aussi `config.example.json`) :
@@ -107,6 +107,7 @@ Une consigne est un texte à trous. Le panneau remplit les trous puis envoie le 
 - `tester` : `{numero}`, `{titre}`, `{branche}`.
 - `merger` : `{liste}` (les PR cochées, dans l'ordre) et `{nombre}`.
 - `lancer` : `{nom}`, `{port}` et `{detail}` (comment démarrer la pile).
+- `ok` : `{label}`, `{numero}`, `{titre}` et `{fichiers}` (les tests que la garde signale). C'est la demande du bouton qui apparaît sous une PR dont la garde est rouge, quand `labelOk` est réglé : il demande d'abord confirmation, puis demande à Claude de poser le label, jamais de merger.
 
 ```json
 {

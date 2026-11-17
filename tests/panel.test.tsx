@@ -149,6 +149,10 @@ async function lancer(
   on('process.run', (_: unknown, e: { argv: readonly string[] }) => {
     ran.push([...e.argv])
     const isCollect = e.argv[1]?.endsWith('collect.py')
+    if (isCollect && e.argv.includes('--garde-detail')) {
+      const detail = { etat: 'pret', fichiers: [{ fichier: 'decision-du-30-10', changements: 8 }] }
+      return { value: { exitCode: 0, stdout: JSON.stringify(detail), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
     if (isCollect && e.argv.includes('--etat')) {
       return { value: { exitCode: 0, stdout: JSON.stringify(etatsGitHub), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
@@ -1005,5 +1009,43 @@ test('localhost : une pastille par pile qui tourne, les ports secondaires en dé
   await ui.press({ key: 'arreter-4001' })
   expect(sent.at(-1)).toMatch(/Arrête la pile locale « essai » \(ports 4002, 4001, 6400\)[\s\S]*preview_stop[\s\S]*Ne supprime rien, ne pousse rien/)
   for (const argv of ran) expect(['/usr/bin/python3', '/usr/bin/open']).toContain(argv[0])
+  await ui.unmount()
+})
+
+test('bouton du label d\'approbation : seulement sous une PR dont la garde est rouge, confirmation, puis demande à Claude', async ($, on) => {
+  const { sent, ran } = await lancer($, on)
+  const ui = await $.ui.mount(pane())
+  // #407 : garde KO ; les autres PR n'ont pas le bouton.
+  expect(await ui.find({ key: 'ok-407' })).toBeTruthy()
+  expect(await ui.find({ key: 'ok-614' })).toBeUndefined()
+  expect(await ui.find({ key: 'ok-605' })).toBeUndefined()
+  expect((await ui.find({ key: 'ok-407' }))?.props.label).toBe('ok-equipe…')
+  // Un appui ne fait que lire le contrôle et demander confirmation.
+  await ui.press({ key: 'ok-407' })
+  expect(ran.find(a => a.includes('--garde-detail'))?.slice(-1)).toEqual(['407'])
+  expect(sent).toEqual([])
+  expect(await ui.find({ type: 'Text', text: 'Tests signalés : decision-du-30-10 (8)' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'Ces tests verrouillent tes décisions. Les modifier ?' })).toBeTruthy()
+  // Annuler : rien ne part.
+  await ui.press({ key: 'ok-annuler-407' })
+  expect(sent).toEqual([])
+  expect(await ui.find({ key: 'ok-407' })).toBeTruthy()
+  // Confirmer : la demande part, pour cette PR seulement, sans merge.
+  await ui.press({ key: 'ok-407' })
+  await ui.press({ key: 'ok-confirmer-407' })
+  expect(sent).toEqual([
+    'ok-equipe #407 : je valide la modification des tests verrouillés listés (decision-du-30-10 (8)). Ajoute seulement le label ok-equipe sur #407, pas de merge.',
+  ])
+  // Ensuite la ligne dit que c'est demandé, et le bouton disparaît.
+  expect(await ui.find({ type: 'Text', text: 'ok-equipe demandé' })).toBeTruthy()
+  expect(await ui.find({ key: 'ok-407' })).toBeUndefined()
+  for (const argv of ran) expect(['/usr/bin/python3', '/usr/bin/open']).toContain(argv[0])
+  await ui.unmount()
+})
+
+test('sans label d\'approbation réglé, pas de bouton', async ($, on) => {
+  await lancer($, on, { ...SNAP, labelOk: '' })
+  const ui = await $.ui.mount(pane())
+  expect(await ui.find({ key: 'ok-407' })).toBeUndefined()
   await ui.unmount()
 })

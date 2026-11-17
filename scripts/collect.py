@@ -377,6 +377,40 @@ def etats_pr(cfg, numeros):
     return out
 
 
+def detail_garde(cfg, numero):
+    """Les fichiers que la garde (réglage « garde ») signale sur une PR, d'après le journal de son échec :
+    les lignes « ✗ <fichier> — … », comptées par fichier."""
+    repo = str(cfg.get("repo") or "").strip()
+    garde_nom = str(cfg.get("garde") or "").strip().lower()
+    if not repo or not garde_nom or not numero:
+        return {"etat": "echec", "fichiers": []}
+    code, txt = run(["gh", "pr", "checks", str(numero), "--repo", repo, "--json", "name,link,state"], timeout=30)
+    if code not in (0, 1, 8):
+        return {"etat": "echec", "fichiers": []}
+    try:
+        checks = json.loads(txt or "[]")
+    except Exception:
+        checks = []
+    lien = next((c.get("link") or "" for c in checks if garde_nom in (c.get("name") or "").lower()), "")
+    m = re.search(r"/actions/runs/(\d+)", lien)
+    if not m:
+        return {"etat": "echec", "fichiers": []}
+    _, journal = run(["gh", "run", "view", m.group(1), "--repo", repo, "--log-failed"], timeout=60)
+    return {"etat": "pret", "fichiers": fichiers_garde(journal)}
+
+
+def fichiers_garde(journal):
+    """« ✗ chemin/du/test.tsx — test retiré : … » -> [{"fichier": "test", "changements": n}], dans l'ordre."""
+    compte = {}
+    for ligne in journal.splitlines():
+        m = re.search(r"✗\s+(\S+)\s+—", ligne)
+        if m:
+            nom = os.path.basename(m.group(1))
+            nom = re.sub(r"\.test\.[jt]sx?$|\.[jt]sx?$|\.py$", "", nom)
+            compte[nom] = compte.get(nom, 0) + 1
+    return [{"fichier": f, "changements": n} for f, n in compte.items()]
+
+
 def sante(cfg):
     """L'adresse de santé réglée (« santeProd ») répond-elle ? Sans adresse réglée : `None`."""
     url = str(cfg.get("santeProd") or "").strip()
@@ -412,6 +446,15 @@ def systeme(cfg):
 def main():
     cfg_path, cli_id = sys.argv[1], sys.argv[2]
     flags = set(sys.argv[3:])
+    if "--garde-detail" in flags:
+        # Ce que la garde reproche à une PR : {"etat": "pret", "fichiers": [{"fichier": …, "changements": 8}]}.
+        try:
+            cfg = json.load(open(cfg_path))
+        except Exception:
+            cfg = {}
+        n = next((a for a in sys.argv[3:] if a.isdigit()), "")
+        print(json.dumps(detail_garde(cfg, n), ensure_ascii=False))
+        return
     if "--etat" in flags:
         # L'état actuel de quelques PR, relu juste avant un merge : {"1621": "MERGED", …}.
         try:

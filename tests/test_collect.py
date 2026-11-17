@@ -145,6 +145,16 @@ class Classement(unittest.TestCase):
         self.assertEqual(collect.role_et_groupe("capture-static"), ("", "capture-static"))
         self.assertEqual(collect.role_et_groupe("api-dev-main-3211", 3211), ("api", "dev-main"))
 
+    def test_fichiers_signales_par_la_garde(self):
+        journal = "\n".join([
+            "guard\tstep\t2026-11-17T20:33:42Z ✗ apps/web/src/__tests__/a/decision-x.test.tsx — test retiré : it(\"…\")",
+            "guard\tstep\t2026-11-17T20:33:42Z ✗ apps/web/src/__tests__/a/decision-x.test.tsx — expect retiré ou modifié : …",
+            "guard\tstep\t2026-11-17T20:33:42Z ✗ tests/autre.py — test retiré : …",
+            "guard\tstep\t2026-11-17T20:33:42Z 2 changement(s) …",
+        ])
+        self.assertEqual(collect.fichiers_garde(journal), [{"fichier": "decision-x", "changements": 2}, {"fichier": "autre", "changements": 1}])
+        self.assertEqual(collect.detail_garde({}, "12"), {"etat": "echec", "fichiers": []})
+
 
 if __name__ == "__main__":
     unittest.main()

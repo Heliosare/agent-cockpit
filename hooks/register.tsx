@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { CleTri, Consignes, EtatSession, Pile, Pr, Resume, Session, Snapshot, Tache, Tri, Vue } from '../types'
+import type { CleTri, Consignes, DetailGarde, EtatSession, Pile, Pr, Resume, Session, Snapshot, Tache, Tri, Vue } from '../types'
 
 const PANE = 'flybuddy'
 // The pane's title, unless the settings give another (« titre »).
@@ -15,6 +15,8 @@ const VUE_DEFAUT: Vue = {
   resumes: {},
   enMerge: {},
   pilesArretees: false,
+  confirmeOk: null,
+  okDemande: {},
 }
 
 // Change a tag when the value's fields change: it declines what an earlier
@@ -23,7 +25,7 @@ const snapshot = atom({ plugin: 'flybuddy-panel', key: 'snapshot' } as const, nu
   shape: 'snapshot-5',
 })
 const vue = atom({ plugin: 'flybuddy-panel', key: 'vue' } as const, VUE_DEFAUT, {
-  shape: 'vue-7',
+  shape: 'vue-8',
 })
 
 // What the pane offers before the person writes their own tasks in the
@@ -57,6 +59,7 @@ Avant chaque merge : lis la PR et ses commentaires, vérifie que ses contrôles 
 Après chaque merge : arrête les serveurs locaux de cette PR et supprime son worktree. Puis mets à jour les piles gardées (« piles » des réglages) avec la branche de base, sans écraser une modification locale (s'il y en a une, dis-le), et vérifie qu'elles répondent ; redémarre-les si besoin.
 À la fin : une ligne par PR, mergée ou non, et l'état des piles gardées.`,
   lancer: 'Lance la pile locale « {nom} » (port {port}){detail}. Ne pousse rien.',
+  ok: '{label} #{numero} : je valide la modification des tests verrouillés listés ({fichiers}). Ajoute seulement le label {label} sur #{numero}, pas de merge.',
 }
 
 type Config = {
@@ -422,6 +425,32 @@ async function oublierResume($: EngineInterface, id: string): Promise<void> {
   })
 }
 
+// What the guard holds against a PR, read from its log by the collector.
+async function detailGarde($: EngineInterface, numero: number): Promise<DetailGarde> {
+  try {
+    const { config } = await reglages($)
+    const run = await $.process.run(
+      ['/usr/bin/python3', `${$.plugin.root}/scripts/collect.py`, config, await $.session.id(), '--garde-detail', String(numero)],
+      { timeoutMs: 90_000 },
+    )
+    if (run.exitCode !== 0) return { etat: 'echec', fichiers: [] }
+    const d = JSON.parse(run.stdout) as DetailGarde
+    return { etat: d.etat === 'pret' ? 'pret' : 'echec', fichiers: Array.isArray(d.fichiers) ? d.fichiers : [] }
+  } catch {
+    return { etat: 'echec', fichiers: [] }
+  }
+}
+
+// The approval button: first a confirmation under the row, with what the
+// guard flags; nothing is sent until the person confirms.
+async function preparerOk($: EngineInterface, numero: number): Promise<void> {
+  await update($, vue, (x: Vue) => ({ ...VUE_DEFAUT, ...x, confirmeOk: { numero, detail: { etat: 'en cours' as const, fichiers: [] } } }))
+  const detail = await detailGarde($, numero)
+  await update($, vue, (x: Vue) =>
+    x.confirmeOk?.numero === numero ? { ...VUE_DEFAUT, ...x, confirmeOk: { numero, detail } } : { ...VUE_DEFAUT, ...x },
+  )
+}
+
 // How long a PR stays « Merge… » at most, if GitHub still lists it open.
 const DUREE_MERGE = 10 * 60_000
 
@@ -583,6 +612,14 @@ export const register: Register = on => {
     const consignes = { ...CONSIGNES_DEFAUT, ...(data.consignes ?? {}) }
     // The word on an approved PR: the team's own label.
     const motOk = data.labelOk || 'approuvée'
+    // The approval label (« labelOk »): a button on each PR whose guard is red,
+    // which only asks Claude to put the label after a confirmation.
+    const avecOk = !!data.labelOk
+    const okDemande = v.okDemande ?? {}
+    const okEnAttente = (p: Pr) => okDemande[p.numero] !== undefined && !p.ownerOk && GARDE_KO.includes(p.garde)
+    const listeFichiers = (d: DetailGarde) => d.fichiers.map(f => `${f.fichier} (${f.changements})`).join(', ')
+    const okTexte = (p: Pr, d: DetailGarde) =>
+      remplir(consignes.ok, { label: motOk, numero: p.numero, titre: p.titre, fichiers: listeFichiers(d) || 'voir le contrôle' })
     // What holds a PR in « Bloqué »: where a guard is asked (« garde »), a
     // green PR without it waits there too.
     const aideGroupe = (g: DefGroupe) => (g.cle === 'bloque' && data.avecGarde ? 'CI rouge, conflit ou garde absente' : g.aide)
@@ -744,6 +781,58 @@ export const register: Register = on => {
     }
 
     // What differs between a PR and a session: the mark, the title, the icons.
+    // Under a PR whose guard is red: the approval button, its confirmation,
+    // or « … demandé » once the request is sent, until the guard turns green.
+    const suitePr = (p: Pr): JSX.Element | null => {
+      if (!avecOk || p.ownerOk || !GARDE_KO.includes(p.garde)) return null
+      if (okEnAttente(p)) {
+        return (
+          <Text size="footnote" color="warning">
+            {`${motOk} demandé`}
+          </Text>
+        )
+      }
+      const c = v.confirmeOk?.numero === p.numero ? v.confirmeOk.detail : null
+      if (!c) {
+        return (
+          <Box flexDirection="row">
+            {puce(`ok-${p.numero}`, `${motOk}…`, () => preparerOk($, p.numero))}
+          </Box>
+        )
+      }
+      if (c.etat === 'en cours') return <Text dimColor>Lecture du contrôle…</Text>
+      return (
+        <Box flexDirection="column" paddingX={1} {...cadre}>
+          <Text wrap="truncate-end">{`#${p.numero} ${p.titre}`}</Text>
+          <Text dimColor>{c.fichiers.length ? `Tests signalés : ${listeFichiers(c)}` : 'Tests signalés : voir le contrôle sur GitHub.'}</Text>
+          <Text weight="semibold">Ces tests verrouillent tes décisions. Les modifier ?</Text>
+          <Box flexDirection="row" gap={1}>
+            <Button
+              key={`ok-confirmer-${p.numero}`}
+              variant="primary"
+              label={`Oui, ${motOk} #${p.numero}`}
+              onPress={async () => {
+                const maintenant = await $.clock.now()
+                await update($, vue, (x: Vue) => ({
+                  ...VUE_DEFAUT,
+                  ...x,
+                  confirmeOk: null,
+                  okDemande: { ...(x.okDemande ?? {}), [p.numero]: maintenant },
+                }))
+                await envoyer($, okTexte(p, c), `${motOk} #${p.numero}`)
+              }}
+            />
+            <Button
+              key={`ok-annuler-${p.numero}`}
+              dimColor
+              label="Annuler"
+              onPress={() => void update($, vue, (x: Vue) => ({ ...VUE_DEFAUT, ...x, confirmeOk: null }))}
+            />
+          </Box>
+        </Box>
+      )
+    }
+
     const partsPr = (p: Pr) => {
       const estCochee = choisies.includes(p.numero)
       const numero = (
@@ -805,6 +894,7 @@ export const register: Register = on => {
         detail: '',
         date: p.date,
         resume: undefined as Resume | undefined,
+        suite: suitePr(p),
         actions: [
           icone(
             `local-${p.numero}`,
@@ -827,6 +917,7 @@ export const register: Register = on => {
       detail: s.etat === 'attend toi' ? s.detail : '',
       date: s.date,
       resume: resumes[s.id],
+      suite: null as JSX.Element | null,
       actions: [
         // Where a PR has « tester », a session has its express summary.
         ...(data.qct && s.cli
@@ -917,6 +1008,7 @@ export const register: Register = on => {
             </Box>
             {demande(C_MARQUE + 1)}
             {resume(C_MARQUE + 1)}
+            {parts.suite ? <Box paddingLeft={C_MARQUE + 1}>{parts.suite}</Box> : null}
           </Box>
         )
       }
@@ -939,6 +1031,7 @@ export const register: Register = on => {
           </Box>
           {demande(C_MARQUE + C_ETAT + 2)}
           {resume(C_MARQUE + C_ETAT + 2)}
+          {parts.suite ? <Box paddingLeft={C_MARQUE + C_ETAT + 2}>{parts.suite}</Box> : null}
         </Box>
       )
     }
