@@ -139,6 +139,12 @@ class Classement(unittest.TestCase):
             # Un chemin avec des espaces reste entier.
             self.assertEqual(collect.dossier_entree({"runtimeArgs": ["--dir", "/a b/c d"]}), "/a b/c d")
 
+    def test_groupe_et_role_d_une_pile(self):
+        self.assertEqual(collect.role_et_groupe("test-essai-api"), ("api", "test-essai"))
+        self.assertEqual(collect.role_et_groupe("web-integration-12"), ("web", "integration-12"))
+        self.assertEqual(collect.role_et_groupe("capture-static"), ("", "capture-static"))
+        self.assertEqual(collect.role_et_groupe("api-dev-main-3211", 3211), ("api", "dev-main"))
+
 
 if __name__ == "__main__":
     unittest.main()

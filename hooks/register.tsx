@@ -14,6 +14,7 @@ const VUE_DEFAUT: Vue = {
   tri: { cle: 'etat', sens: 1 },
   resumes: {},
   enMerge: {},
+  pilesArretees: false,
 }
 
 // Change a tag when the value's fields change: it declines what an earlier
@@ -22,7 +23,7 @@ const snapshot = atom({ plugin: 'flybuddy-panel', key: 'snapshot' } as const, nu
   shape: 'snapshot-5',
 })
 const vue = atom({ plugin: 'flybuddy-panel', key: 'vue' } as const, VUE_DEFAUT, {
-  shape: 'vue-6',
+  shape: 'vue-7',
 })
 
 // What the pane offers before the person writes their own tasks in the
@@ -103,6 +104,7 @@ const G = {
   arrete: '○', // ○
   suite: '↳', // ↳
   resume: '≡', // ≡
+  stop: '■', // ■
 } as const
 // A space the surface keeps and never breaks a line at.
 const ESPACE = ' '
@@ -285,6 +287,13 @@ function lancerTexte(p: Pile, modele: string): string {
     ? ` avec preview_start, entrée « ${p.lanceur} » de ~/.claude/launch.json`
     : ` : ajoute une entrée à ~/.claude/launch.json${ou} puis preview_start`
   return remplir(modele, { nom: p.nom, port: p.port, detail })
+}
+
+// What « arrêter » asks of Claude for one stack: stop its processes, nothing more.
+function arreterTexte(nom: string, piles: readonly Pile[]): string {
+  const ports = piles.filter(p => p.actif).map(p => p.port)
+  const noms = piles.filter(p => p.lanceur).map(p => `« ${p.lanceur} »`)
+  return `Arrête la pile locale « ${nom} » (port${ports.length > 1 ? 's' : ''} ${ports.join(', ')}) : preview_stop si elle a été lancée par preview_start${noms.length ? ` (entrées ${noms.join(', ')} de ~/.claude/launch.json)` : ''}, sinon arrête le processus qui écoute sur chacun de ces ports. Vérifie ensuite que plus rien n'écoute dessus. Ne supprime rien, ne pousse rien.`
 }
 
 function testerTexte(p: Pr, modele: string): string {
@@ -958,18 +967,63 @@ export const register: Register = on => {
       )
     }
 
-    const pile = (p: Pile) =>
-      puce(
-        p.actif ? `ouvrir-${p.port}` : `lancer-${p.port}`,
-        `${p.nom} ${p.port} ${p.actif ? G.ouvrir : G.tester}`,
-        () => (p.actif ? $.process.run(['/usr/bin/open', p.url]) : envoyer($, lancerTexte(p, consignes.lancer), `lancer ${p.nom}`)),
-        <Text color={p.actif ? 'success' : 'inactive'}>{`${ESPACE}${p.actif ? G.actif : G.arrete}`}</Text>,
-        // A running stack whose worktree's PR is merged or closed, or whose
-        // folder is gone: what « Nettoyer » would stop.
-        (data.orphelines ?? []).includes(p.port) ? (
-          <Text size="footnote" color="warning">{`orpheline${ESPACE}`}</Text>
-        ) : undefined,
+    // Localhost: one chip per stack (its web, API, Redis… ports together), the
+    // running ones only; the stopped ones fold behind « + N arrêtées ».
+    type GroupePiles = { nom: string; piles: Pile[]; actif: boolean; gardee: boolean }
+    const groupesPiles: GroupePiles[] = []
+    for (const p of data.piles) {
+      const nom = p.groupe || p.nom
+      let g = groupesPiles.find(x => x.nom === nom)
+      if (!g) groupesPiles.push((g = { nom, piles: [], actif: false, gardee: false }))
+      g.piles.push(p)
+      g.actif ||= p.actif
+      g.gardee ||= p.epinglee
+    }
+    const principale = (g: GroupePiles) => {
+      const vivantes = g.piles.filter(p => p.actif === g.actif)
+      return vivantes.find(p => p.role === 'web') ?? vivantes[0] ?? g.piles[0]!
+    }
+    const orphelines = data.orphelines ?? []
+    const pileVivante = (g: GroupePiles) => {
+      const p = principale(g)
+      const autres = g.piles.filter(x => x.actif && x !== p)
+      const orpheline = g.piles.some(x => orphelines.includes(x.port))
+      return (
+        <Box key={`groupe-pile-${g.nom}`} flexDirection="row" alignItems="center" flexShrink={0}>
+          {puce(
+            `ouvrir-${p.port}`,
+            `${g.nom} ${p.port} ${G.ouvrir}`,
+            () => $.process.run(['/usr/bin/open', p.url]),
+            <Text color="success">{`${ESPACE}${G.actif}`}</Text>,
+            autres.length > 0 || orpheline ? (
+              <Text size="footnote" dimColor={!orpheline} color={orpheline ? 'warning' : undefined}>
+                {`${autres.map(x => `${x.role || x.nom}${ESPACE}${x.port}`).join(' · ')}${orpheline ? `${autres.length ? ' · ' : ''}orpheline` : ''}${ESPACE}`}
+              </Text>
+            ) : undefined,
+          )}
+          {g.gardee ? null : (
+            <Button
+              key={`arreter-${p.port}`}
+              plain
+              label={`${G.stop}${ESPACE}arrêter`}
+              onPress={() => void envoyer($, arreterTexte(g.nom, g.piles), `arrêter ${g.nom}`)}
+            />
+          )}
+        </Box>
       )
+    }
+    const pileArretee = (g: GroupePiles) => {
+      const p = principale(g)
+      return puce(
+        `lancer-${p.port}`,
+        `${g.nom} ${p.port} ${G.tester}`,
+        () => envoyer($, lancerTexte(p, consignes.lancer), `lancer ${g.nom}`),
+        <Text color="inactive">{`${ESPACE}${G.arrete}`}</Text>,
+      )
+    }
+    const vivantes = groupesPiles.filter(g => g.actif)
+    const arretees = groupesPiles.filter(g => !g.actif)
+
 
     // A bench to try what the surface draws (sizes, gaps, borders, cuts),
     // shown under the pane's first row while the settings file says
@@ -1163,12 +1217,18 @@ export const register: Register = on => {
           <Text weight="semibold" dimColor>
             LOCALHOST
           </Text>
-          {data.piles.map(pile)}
-          {data.autresPiles ? (
-            <Text dimColor size="footnote">
-              {`+ ${pluriel(data.autresPiles, 'arrêtée')}`}
-            </Text>
+          {vivantes.map(pileVivante)}
+          {vivantes.length === 0 ? <Text dimColor>rien ne tourne</Text> : null}
+          {arretees.length > 0 ? (
+            <Button
+              key="arretees"
+              plain
+              dimColor
+              label={v.pilesArretees ? 'masquer les arrêtées' : `+ ${pluriel(arretees.length, 'arrêtée')}`}
+              onPress={() => void update($, vue, (x: Vue) => ({ ...VUE_DEFAUT, ...x, pilesArretees: !x.pilesArretees }))}
+            />
           ) : null}
+          {v.pilesArretees ? arretees.map(pileArretee) : null}
         </Box>
 
         <Box marginTop={1}>

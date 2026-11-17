@@ -48,6 +48,10 @@ export type Pile = {
   epinglee: boolean
   dossier?: string | null
   commande?: string | null
+  /** La pile à laquelle ce port appartient (web, API, Redis… d'un même worktree) : une pastille par groupe. */
+  groupe?: string
+  /** web, api, redis… ; vide si inconnu. */
+  role?: string
 }
 
 /** `court` : le texte du bouton, quand `libelle` est trop long pour une ligne. */
@@ -106,6 +110,8 @@ export type Vue = {
   tri: Tri
   /** Les résumés express affichés, par identifiant de session. */
   resumes: Record<string, Resume>
+  /** Les piles arrêtées sont dépliées sous « Localhost ». */
+  pilesArretees: boolean
   /** Les PR dont le merge vient d'être demandé, avec l'heure de la demande (ms). */
   enMerge: Record<number, number>
 }

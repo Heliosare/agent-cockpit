@@ -416,6 +416,9 @@ test('chaque icône envoie la bonne consigne, et rien ne part tout seul', async 
 
   // Localhost : ouvrir une pile qui tourne, demander à Claude de lancer l'autre.
   expect((await ui.find({ key: 'ouvrir-4000' }))?.props.label).toBe('Docs 4000 ↗︎')
+  // Les piles arrêtées sont repliées : on les déplie pour lancer celle-ci.
+  expect(await ui.find({ key: 'lancer-3000' })).toBeUndefined()
+  await ui.press({ key: 'arretees' })
   expect((await ui.find({ key: 'lancer-3000' }))?.props.label).toBe('Web 3000 ▶︎')
   await ui.press({ key: 'ouvrir-4000' })
   expect(ran).toContainEqual(['/usr/bin/open', 'http://localhost:4000'])
@@ -823,6 +826,7 @@ test('les réglages réécrivent le titre et les consignes ; celles qui manquent
   await ui.press({ key: 'merger' })
   expect(sent.at(-1)).toBe('Merge #605 (vers prod), #614 : 2 PR, avec la garde maison.')
   // « lancer » n'est pas réécrite : son texte de départ, avec et sans lanceur.
+  await ui.press({ key: 'arretees' })
   await ui.press({ key: 'lancer-3000' })
   expect(sent.at(-1)).toBe(
     'Lance la pile locale « Web » (port 3000) avec preview_start, entrée « web-dev » de ~/.claude/launch.json. Ne pousse rien.',
@@ -842,6 +846,7 @@ test('une pile sans lanceur : la consigne dit où et comment la démarrer', asyn
   }
   const { sent } = await lancer($, on, snap)
   const ui = await $.ui.mount(pane())
+  await ui.press({ key: 'arretees' })
   await ui.press({ key: 'lancer-5000' })
   expect(sent.at(-1)).toBe(
     'Lance la pile locale « Site » (port 5000) : ajoute une entrée à ~/.claude/launch.json (dossier /chemin/site, commande « npm run dev ») puis preview_start. Ne pousse rien.',
@@ -966,5 +971,39 @@ test('toutes déjà mergées : rien n\'est envoyé à Claude', async ($, on) => 
   expect(sent).toEqual([])
   expect(toasts.at(-1)).toBe('Rien à merger, déjà mergées ou fermées : #429, #614.')
   expect(await ui.find({ key: 'merger' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('localhost : une pastille par pile qui tourne, les ports secondaires en détail, « arrêter » sauf pour les piles gardées', async ($, on) => {
+  const piles = [
+    { nom: 'Web dev', lanceur: 'web-dev', port: 3000, url: 'http://localhost:3000', actif: true, epinglee: true, groupe: 'Dev', role: 'web' },
+    { nom: 'API dev', lanceur: 'api-dev', port: 3001, url: 'http://localhost:3001', actif: true, epinglee: true, groupe: 'Dev', role: 'api' },
+    { nom: 'essai-api', lanceur: 'essai-api', port: 4002, url: 'http://localhost:4002', actif: true, epinglee: false, groupe: 'essai', role: 'api' },
+    { nom: 'essai-web', lanceur: 'essai-web', port: 4001, url: 'http://localhost:4001', actif: true, epinglee: false, groupe: 'essai', role: 'web' },
+    { nom: 'essai-redis', lanceur: 'essai-redis', port: 6400, url: 'http://localhost:6400', actif: true, epinglee: false, groupe: 'essai', role: 'redis' },
+    { nom: 'vieux-web', lanceur: 'vieux-web', port: 5000, url: 'http://localhost:5000', actif: false, epinglee: false, groupe: 'vieux', role: 'web' },
+    { nom: 'vieux-api', lanceur: 'vieux-api', port: 5001, url: 'http://localhost:5001', actif: false, epinglee: false, groupe: 'vieux', role: 'api' },
+    { nom: 'autre', lanceur: 'autre', port: 5100, url: 'http://localhost:5100', actif: false, epinglee: false, groupe: 'autre', role: '' },
+  ]
+  const { sent, ran } = await lancer($, on, { ...SNAP, piles, autresPiles: 3 })
+  const ui = await $.ui.mount(pane())
+  // Deux piles tournent : deux pastilles, sur le port web.
+  expect((await ui.find({ key: 'ouvrir-3000' }))?.props.label).toBe('Dev 3000 ↗\ufe0e')
+  expect((await ui.find({ key: 'ouvrir-4001' }))?.props.label).toBe('essai 4001 ↗\ufe0e')
+  expect(await ui.find({ key: 'ouvrir-3001' })).toBeUndefined()
+  expect(await ui.find({ key: 'ouvrir-4002' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^api\s3001\s$/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /^api\s4002 · redis\s6400\s$/ })).toBeTruthy()
+  // Les arrêtées : un seul mot, repliées.
+  expect((await ui.find({ key: 'arretees' }))?.props.label).toBe('+ 2 arrêtées')
+  expect(await ui.find({ key: 'lancer-5000' })).toBeUndefined()
+  await ui.press({ key: 'arretees' })
+  expect((await ui.find({ key: 'lancer-5000' }))?.props.label).toBe('vieux 5000 ▶\ufe0e')
+  expect(await ui.find({ key: 'lancer-5100' })).toBeTruthy()
+  // « arrêter » : pas pour la pile gardée, oui pour l'autre ; il ne fait qu'envoyer la demande.
+  expect(await ui.find({ key: 'arreter-3000' })).toBeUndefined()
+  await ui.press({ key: 'arreter-4001' })
+  expect(sent.at(-1)).toMatch(/Arrête la pile locale « essai » \(ports 4002, 4001, 6400\)[\s\S]*preview_stop[\s\S]*Ne supprime rien, ne pousse rien/)
+  for (const argv of ran) expect(['/usr/bin/python3', '/usr/bin/open']).toContain(argv[0])
   await ui.unmount()
 })

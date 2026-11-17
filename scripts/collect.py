@@ -188,7 +188,28 @@ def ports_ecoute():
     return ports
 
 
+ROLES = {"web", "api", "redis", "files", "faketg", "worker", "db", "front", "back", "server", "app"}
+
+
+def role_et_groupe(nom, port=None):
+    """« essai-recette-api » -> ("api", "essai-recette") ; « web-integration-12 » -> ("web", "integration-12").
+    Le port écrit dans le nom (« dev-main-3210 ») ne compte pas : « dev-main »."""
+    mots = [m for m in re.split(r"[-_ ]+", str(nom or "").lower()) if m and m != str(port)]
+    roles = [m for m in mots if m in ROLES]
+    reste = [m for m in mots if m not in ROLES]
+    return (roles[0] if roles else ""), ("-".join(reste) or str(nom or ""))
+
+
+def entier(v):
+    try:
+        return int(v)
+    except Exception:
+        return None
+
+
 def localhost(cfg, ecoute):
+    """Toutes les piles connues : celles des réglages (« piles », gardées) puis celles de launch.json,
+    chacune avec son groupe (une pile = web + API + …) et son rôle. `autres` : celles qui sont arrêtées."""
     try:
         entries = json.load(open(LAUNCH)).get("configurations", [])
     except Exception:
@@ -197,7 +218,8 @@ def localhost(cfg, ecoute):
     piles, vus = [], set()
     for p in cfg.get("piles", []):
         e = by_name.get(p.get("lanceur")) or {}
-        port = p.get("port") or e.get("port")
+        port = entier(p.get("port") or e.get("port"))
+        role, groupe = role_et_groupe(p.get("lanceur") or p.get("nom"))
         piles.append({
             "nom": p.get("nom") or e.get("name"),
             "lanceur": p.get("lanceur") if e else None,
@@ -207,19 +229,23 @@ def localhost(cfg, ecoute):
             "epinglee": True,
             "dossier": p.get("dossier"),
             "commande": p.get("commande"),
+            # Un nom de groupe donné dans les réglages réunit plusieurs ports sous une seule pastille.
+            "groupe": p.get("groupe") or p.get("nom") or groupe,
+            "role": p.get("role") or role,
         })
         vus.add(port)
     autres = 0
     for e in entries:
-        port = e.get("port")
-        if port in vus:
+        port = entier(e.get("port"))
+        if port is None or port in vus:
             continue
-        if port in ecoute:
-            piles.append({"nom": e.get("name"), "lanceur": e.get("name"), "port": port,
-                          "url": e.get("url") or f"http://localhost:{port}", "actif": True, "epinglee": False})
-            vus.add(port)
-        else:
-            autres += 1
+        role, groupe = role_et_groupe(e.get("name"), port)
+        actif = port in ecoute
+        piles.append({"nom": e.get("name"), "lanceur": e.get("name"), "port": port,
+                      "url": e.get("url") or f"http://localhost:{port}", "actif": actif, "epinglee": False,
+                      "groupe": groupe, "role": role})
+        vus.add(port)
+        autres += 0 if actif else 1
     return piles, autres
 
 
