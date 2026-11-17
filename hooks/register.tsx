@@ -1001,14 +1001,14 @@ export const register: Register = on => {
               </Text>
             ) : undefined,
           )}
-          {g.gardee ? null : (
-            <Button
-              key={`arreter-${p.port}`}
-              plain
-              label={`${G.stop}${ESPACE}arrêter`}
-              onPress={() => void envoyer($, arreterTexte(g.nom, g.piles), `arrêter ${g.nom}`)}
-            />
-          )}
+          {/* Every running stack can be stopped; a kept one (« piles ») stays
+              listed under the stopped ones, ready to start again. */}
+          <Button
+            key={`arreter-${p.port}`}
+            plain
+            label={`${G.stop}${ESPACE}arrêter`}
+            onPress={() => void envoyer($, arreterTexte(g.nom, g.piles), `arrêter ${g.nom}`)}
+          />
         </Box>
       )
     }

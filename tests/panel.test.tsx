@@ -1000,8 +1000,8 @@ test('localhost : une pastille par pile qui tourne, les ports secondaires en dé
   await ui.press({ key: 'arretees' })
   expect((await ui.find({ key: 'lancer-5000' }))?.props.label).toBe('vieux 5000 ▶\ufe0e')
   expect(await ui.find({ key: 'lancer-5100' })).toBeTruthy()
-  // « arrêter » : pas pour la pile gardée, oui pour l'autre ; il ne fait qu'envoyer la demande.
-  expect(await ui.find({ key: 'arreter-3000' })).toBeUndefined()
+  // « arrêter » sur chaque pile qui tourne, gardée ou non ; il ne fait qu'envoyer la demande.
+  expect(await ui.find({ key: 'arreter-3000' })).toBeTruthy()
   await ui.press({ key: 'arreter-4001' })
   expect(sent.at(-1)).toMatch(/Arrête la pile locale « essai » \(ports 4002, 4001, 6400\)[\s\S]*preview_stop[\s\S]*Ne supprime rien, ne pousse rien/)
   for (const argv of ran) expect(['/usr/bin/python3', '/usr/bin/open']).toContain(argv[0])
