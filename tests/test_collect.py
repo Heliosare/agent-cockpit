@@ -118,6 +118,27 @@ class Classement(unittest.TestCase):
         self.assertFalse(collect.est_ancien(NOW - 2 * collect.JOUR, NOW, 3))
         self.assertFalse(collect.est_ancien(0, NOW, 3))
 
+    def test_piles_orphelines(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            entrees = [
+                {"name": "garde", "runtimeArgs": ["--dir", d]},
+                {"name": "disparue", "runtimeArgs": ["-c", "cd /nulle/part/apps/web && npm run dev"]},
+                {"name": "epinglee", "runtimeArgs": ["--dir", "/nulle/part"]},
+                {"name": "arretee", "runtimeArgs": ["--dir", "/nulle/part"]},
+            ]
+            piles = [
+                {"nom": "garde", "lanceur": "garde", "port": 1, "actif": True, "epinglee": False},
+                {"nom": "disparue", "lanceur": "disparue", "port": 2, "actif": True, "epinglee": False},
+                {"nom": "epinglee", "lanceur": "epinglee", "port": 3, "actif": True, "epinglee": True},
+                {"nom": "arretee", "lanceur": "arretee", "port": 4, "actif": False, "epinglee": False},
+            ]
+            # Un dossier qui n'est pas un dépôt git, sans PR fermée connue : gardé.
+            self.assertEqual(collect.orphelines(piles, set(), entrees), [2])
+            self.assertEqual(collect.dossier_entree(entrees[1]), "/nulle/part/apps/web")
+            # Un chemin avec des espaces reste entier.
+            self.assertEqual(collect.dossier_entree({"runtimeArgs": ["--dir", "/a b/c d"]}), "/a b/c d")
+
 
 if __name__ == "__main__":
     unittest.main()

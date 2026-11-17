@@ -275,6 +275,66 @@ def prs(cfg, jours_ancien=3):
     return out
 
 
+def dossier_entree(e):
+    """Le dossier où une entrée de launch.json démarre son serveur : un argument qui est un chemin absolu
+    (espaces compris), ou le dossier d'un « cd … && » dans une commande shell."""
+    args = e.get("runtimeArgs") or []
+    if not isinstance(args, list):
+        args = [str(args)]
+    for a in args:
+        a = str(a)
+        m = re.search(r"\bcd\s+(['\"]?)(/.+?)\1\s*(&&|;|$)", a)
+        if m:
+            return m.group(2)
+        if a.startswith("/"):
+            return a
+    return None
+
+
+def branches_fermees(cfg):
+    """Les branches dont les PR sont toutes mergées ou fermées. `None` : pas de dépôt réglé, ou GitHub muet."""
+    repo = str(cfg.get("repo") or "").strip()
+    if not repo:
+        return None
+    code, txt = run(["gh", "pr", "list", "--repo", repo, "--state", "all", "--limit", "200",
+                     "--json", "headRefName,baseRefName,state"], timeout=40)
+    if code != 0:
+        return None
+    ouvertes, fermees, bases = set(), set(), {"main", "master", "HEAD"}
+    for p in json.loads(txt or "[]"):
+        (ouvertes if p.get("state") == "OPEN" else fermees).add(p.get("headRefName"))
+        # Une branche qui sert de base (dev, main…) vit toujours, même après une release mergée.
+        bases.add(p.get("baseRefName"))
+    return fermees - ouvertes - bases
+
+
+def orphelines(piles, fermees, entrees=None):
+    """Les ports des piles qui tournent alors que leur worktree n'a plus de PR ouverte (mergée ou fermée),
+    ou que leur dossier n'existe plus. Les piles épinglées dans les réglages sont gardées."""
+    if entrees is None:
+        try:
+            entrees = json.load(open(LAUNCH)).get("configurations", [])
+        except Exception:
+            entrees = []
+    par_nom = {e.get("name"): e for e in entrees}
+    out = []
+    for p in piles:
+        if not p.get("actif") or p.get("epinglee"):
+            continue
+        e = par_nom.get(p.get("lanceur")) or {}
+        dossier = dossier_entree(e)
+        if not dossier:
+            continue
+        if not os.path.exists(dossier):
+            out.append(p["port"])
+            continue
+        if fermees:
+            code, br = run(["git", "-C", dossier, "rev-parse", "--abbrev-ref", "HEAD"], timeout=5)
+            if code == 0 and br.strip() in fermees:
+                out.append(p["port"])
+    return out
+
+
 def sante(cfg):
     """L'adresse de santé réglée (« santeProd ») répond-elle ? Sans adresse réglée : `None`."""
     url = str(cfg.get("santeProd") or "").strip()
@@ -333,6 +393,7 @@ def main():
             "avecProd": bool(str(cfg.get("brancheProd") or "").strip())}
     if "--prs" in flags:
         data["prs"] = prs(cfg, jours)
+        data["orphelines"] = orphelines(piles, branches_fermees(cfg))
     if "--sante" in flags:
         data["sante"] = sante(cfg)
     print(json.dumps(data, ensure_ascii=False))

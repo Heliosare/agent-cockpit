@@ -35,7 +35,7 @@ const TACHES_DEFAUT: Tache[] = [
   {
     court: 'Nettoyer',
     libelle: 'Nettoyer sessions et worktrees',
-    texte: 'Archive les sessions terminées, puis liste les worktrees git et supprime ceux qui sont déjà mergés. Ne pousse rien.',
+    texte: 'Nettoie ma machine. Note d\'abord l\'espace disque libre.\n1. Archive les sessions Claude terminées.\n2. Liste les worktrees git. Pour chacun dont la PR est mergée ou fermée : arrête ses serveurs locaux (web, API, Redis…), supprime le worktree, puis supprime les bases Postgres de test qu\'il utilisait.\nGarde les piles listées dans ~/.claude/flybuddy-panel/config.json et tout ce qui sert une PR encore ouverte. Ne supprime jamais une base *_dev, ni celles des piles gardées.\n3. Retire de ~/.claude/launch.json les entrées dont le dossier n\'existe plus.\n4. Donne l\'espace disque libre avant et après, et la liste de ce que tu as supprimé.\nNe pousse rien.',
   },
 ]
 
@@ -359,6 +359,7 @@ async function collecter($: EngineInterface, mode: Collecte): Promise<{ favori: 
       consignes: cfg.consignes,
       prs: avecPrs ? data.prs : old?.prs,
       sante: avecPrs ? data.sante : old?.sante,
+      orphelines: avecPrs ? data.orphelines : old?.orphelines,
     }))
     return { favori: !!data.moi?.favori }
   } catch (err) {
@@ -621,7 +622,7 @@ export const register: Register = on => {
 
     // A word that is a control: a plain Button in a thin rounded line, as the
     // mockup's chips and far smaller than the app's own button.
-    const puce = (cle: string, libelle: string, onPress: () => unknown, avant?: JSX.Element) => (
+    const puce = (cle: string, libelle: string, onPress: () => unknown, avant?: JSX.Element, apres?: JSX.Element) => (
       <Box
         key={`puce-${cle}`}
         flexDirection="row"
@@ -634,6 +635,7 @@ export const register: Register = on => {
       >
         {avant}
         <Button key={cle} plain label={libelle} onPress={() => void onPress()} />
+        {apres}
       </Box>
     )
 
@@ -905,6 +907,11 @@ export const register: Register = on => {
         `${p.nom} ${p.port} ${p.actif ? G.ouvrir : G.tester}`,
         () => (p.actif ? $.process.run(['/usr/bin/open', p.url]) : envoyer($, lancerTexte(p, consignes.lancer), `lancer ${p.nom}`)),
         <Text color={p.actif ? 'success' : 'inactive'}>{`${ESPACE}${p.actif ? G.actif : G.arrete}`}</Text>,
+        // A running stack whose worktree's PR is merged or closed, or whose
+        // folder is gone: what « Nettoyer » would stop.
+        (data.orphelines ?? []).includes(p.port) ? (
+          <Text size="footnote" color="warning">{`orpheline${ESPACE}`}</Text>
+        ) : undefined,
       )
 
     // A bench to try what the surface draws (sizes, gaps, borders, cuts),

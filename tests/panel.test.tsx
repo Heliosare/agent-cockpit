@@ -890,3 +890,26 @@ test("sans dossier personnel lisible, le panneau n'écrit nulle part et garde se
   expect(lus).toEqual([])
   await ui.unmount()
 })
+
+test("localhost : une pile qui tourne pour une PR mergée porte la marque « orpheline »", async ($, on) => {
+  await lancer($, on, { ...SNAP, orphelines: [4000] })
+  const ui = await $.ui.mount(pane())
+  expect(await ui.find({ type: 'Text', text: /^orpheline/ })).toBeTruthy()
+  expect((await ui.find({ key: 'ouvrir-4000' }))?.props.label).toBe('Docs 4000 ↗\ufe0e')
+  await ui.unmount()
+})
+
+test('localhost : sans pile orpheline, pas de marque', async ($, on) => {
+  await lancer($, on, { ...SNAP, orphelines: [] })
+  const ui = await $.ui.mount(pane())
+  expect(await ui.find({ type: 'Text', text: /^orpheline/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('« Nettoyer » par défaut : serveurs, worktrees, bases de test, launch.json, disque avant et après', async ($, on) => {
+  const { sent } = await lancer($, on, SNAP, undefined, '{}')
+  const ui = await $.ui.mount(pane())
+  await ui.press({ key: 'tache-1' })
+  expect(sent.at(-1)).toMatch(/arrête ses serveurs locaux[\s\S]*supprime le worktree[\s\S]*bases Postgres de test[\s\S]*\*_dev[\s\S]*launch\.json[\s\S]*avant et après[\s\S]*Ne pousse rien/)
+  await ui.unmount()
+})
