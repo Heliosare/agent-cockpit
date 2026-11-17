@@ -37,7 +37,7 @@ const TACHES_DEFAUT: Tache[] = [
   {
     court: 'Nettoyer',
     libelle: 'Nettoyer sessions et worktrees',
-    texte: 'Nettoie ma machine. Note d\'abord l\'espace disque libre.\n1. Archive les sessions Claude terminées.\n2. Liste les worktrees git. Pour chacun dont la PR est mergée ou fermée : arrête ses serveurs locaux (web, API, Redis…), supprime le worktree, puis supprime les bases Postgres de test qu\'il utilisait.\nGarde les piles listées dans ~/.claude/flybuddy-panel/config.json et tout ce qui sert une PR encore ouverte. Ne supprime jamais une base *_dev, ni celles des piles gardées.\n3. Retire de ~/.claude/launch.json les entrées dont le dossier n\'existe plus.\n4. Donne l\'espace disque libre avant et après, et la liste de ce que tu as supprimé.\nNe pousse rien.',
+    texte: 'Nettoie ma machine. Note d\'abord l\'espace disque libre.\n1. Archive les sessions Claude terminées.\n2. Liste les worktrees git. Pour chacun dont la PR est mergée ou fermée : arrête ses serveurs locaux (web, API, Redis…), supprime le worktree, puis supprime les bases Postgres de test qu\'il utilisait.\nGarde les piles listées dans ~/.claude/flybuddy-panel/config.json et tout ce qui sert une PR encore ouverte. Ne supprime jamais une base *_dev, ni celles des piles gardées.\n3. Retire de ~/.claude/launch.json les entrées dont le dossier n\'existe plus.\n3 bis. Mets à jour les piles gardées avec la dernière version de leur branche de base, sans écraser une modification locale, et vérifie qu\'elles répondent.\n4. Donne l\'espace disque libre avant et après, et la liste de ce que tu as supprimé.\nNe pousse rien.',
   },
 ]
 
@@ -54,7 +54,8 @@ Ne pousse rien, ne merge rien.`,
   merger: `Merge ces PR, une par une, dans cet ordre : {liste}.
 C'est mon OK explicite pour ces {nombre} PR seulement, pas pour une autre.
 Avant chaque merge : lis la PR et ses commentaires, vérifie que ses contrôles sont verts et qu'elle est mergeable. Sinon, saute-la et dis-moi pourquoi.
-À la fin : une ligne par PR, mergée ou non.`,
+Après chaque merge : arrête les serveurs locaux de cette PR et supprime son worktree. Puis mets à jour les piles gardées (« piles » des réglages) avec la branche de base, sans écraser une modification locale (s'il y en a une, dis-le), et vérifie qu'elles répondent ; redémarre-les si besoin.
+À la fin : une ligne par PR, mergée ou non, et l'état des piles gardées.`,
   lancer: 'Lance la pile locale « {nom} » (port {port}){detail}. Ne pousse rien.',
 }
 
