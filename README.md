@@ -10,6 +10,8 @@ Install, at a Claude Code prompt in a terminal:
 
 Then type `/flybuddy`. Settings: `~/.claude/flybuddy-panel/config.json`, created on first run; see `config.example.json`. Needs macOS, the Claude desktop app, `gh` signed in, `/usr/bin/python3`.
 
+Contributions welcome: open an issue, or a pull request with the tests passing (see « Contribuer » below). MIT licence.
+
 ---
 
 **Français** — Un panneau pour Claude Code, affiché à côté du chat dans l'app de bureau : tes sessions Claude et les PR ouvertes d'un dépôt GitHub dans un seul tableau, trié par priorité.
@@ -129,3 +131,16 @@ python3 tests/test_collect.py
 - `hooks/register.tsx` dessine le panneau. `scripts/collect.py` rassemble les données et n'imprime que des champs choisis : titres, états, numéros.
 - `outils/` sert à voir le panneau sans l'app, pour régler la mise en page.
 - Sur l'app de bureau, un bouton affiche son `label` même s'il a des enfants. Le label d'une icône est donc le caractère lui-même, et son nom vit dans une carte de survol.
+
+## Contribuer
+
+Les issues et les pull requests sont les bienvenues.
+
+1. Forke le dépôt et crée une branche.
+2. Avant d'ouvrir la PR, lance les trois vérifications de la section « Développer » : elles doivent passer.
+3. Garde le code générique : ce qui est propre à une équipe (dépôt, adresses, noms de piles, consignes) va dans les réglages, pas dans le code ni dans les tests.
+4. Les boutons ne font qu'envoyer une consigne à Claude ou ouvrir un lien : aucun ne doit merger, pousser ou lancer quelque chose lui-même.
+
+## Licence
+
+MIT, voir [LICENSE](LICENSE).

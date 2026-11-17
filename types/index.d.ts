@@ -11,7 +11,7 @@ export type Session = {
   favori: boolean
   /** Dernière activité, en millisecondes (pour trier). */
   activite: number | null
-  /** Dernière activité, « jj/mm HH:MM », heure de Paris. */
+  /** Dernière activité, « jj/mm HH:MM », dans le fuseau réglé (« fuseau ») ou celui de la machine. */
   date: string
 }
 
@@ -30,7 +30,7 @@ export type Pr = {
   branche?: string
   /** Dernière mise à jour, en millisecondes (pour trier). */
   maj: number
-  /** Dernière mise à jour, « jj/mm HH:MM », heure de Paris. */
+  /** Dernière mise à jour, « jj/mm HH:MM », dans le fuseau réglé (« fuseau ») ou celui de la machine. */
   date: string
   conflit: boolean
   /** Son merge vient d'être demandé à Claude : elle ne se coche plus. */
