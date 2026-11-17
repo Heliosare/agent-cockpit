@@ -381,7 +381,9 @@ async function collecter($: EngineInterface, mode: Collecte): Promise<{ favori: 
       sante: avecPrs ? data.sante : old?.sante,
       orphelines: avecPrs ? data.orphelines : old?.orphelines,
     }))
-    void preparerResumes($, data)
+    // Only where the pane is shown (it then refreshes on a timer): a session
+    // that merely loaded the mod makes no summary.
+    if (polling) void preparerResumes($, data)
     return { favori: !!data.moi?.favori }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
