@@ -1051,6 +1051,17 @@ export const register: Register = on => {
           >
             <Text weight="bold">{g.nom.toUpperCase()}</Text>
             <Text dimColor>{rangs.length > 0 ? `${rangs.length} · ${aideGroupe(g)}` : "rien ne t'attend"}</Text>
+            {g.cle === 'fini' ? (
+              <>
+                <Box flexGrow={1} />
+                <Button
+                  key="replier-fini"
+                  plain
+                  label={`${G.monte}${ESPACE}replier`}
+                  onPress={() => void update($, vue, (x: Vue) => ({ ...VUE_DEFAUT, ...x, toutesSessions: false }))}
+                />
+              </>
+            ) : null}
           </Box>
           {rangs.length > 0 ? (
             <Box flexDirection="column" rowGap="xs" paddingY="xs">

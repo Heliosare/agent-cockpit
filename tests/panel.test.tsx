@@ -291,6 +291,10 @@ test('triage par priorité : trois groupes, sessions et PR mélangées, tri par 
   expect((await rangs(ui)).at(-1)).toBe('Vieux')
   expect(await pastille(ui, 'Finie')).toBeTruthy()
   expect((await ui.find({ key: 'toutes' }))?.text).toBe('Masquer les terminées et anciennes')
+  // On replie aussi depuis la bande du groupe, sans descendre sous la liste.
+  await ui.press({ key: 'replier-fini' })
+  expect(await ui.find({ type: 'Text', text: 'TERMINÉ OU ANCIEN' })).toBeUndefined()
+  expect((await ui.find({ key: 'toutes' }))?.text).toBe('Voir 1 terminée ou ancienne')
   await ui.unmount()
 })
 
