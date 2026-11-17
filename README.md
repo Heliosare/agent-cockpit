@@ -1,6 +1,18 @@
 # flybuddy-panel
 
-Un panneau pour Claude Code, affiché à côté du chat dans l'app de bureau : tes sessions Claude et les PR ouvertes d'un dépôt GitHub dans un seul tableau, trié par priorité.
+**English** — A Claude Code pane, shown next to the chat in the desktop app: your Claude sessions and the open PRs of a GitHub repo in one table sorted by priority (« À toi » / yours, « En cours » / running, « Bloqué » / blocked), plus your repeated tasks and local servers as buttons. Buttons only send an instruction to Claude or open a link: none merges, pushes or starts a server by itself. The UI is in French.
+
+Install, at a Claude Code prompt in a terminal:
+
+```
+/plugin install flybuddy-panel --marketplace Heliosare/flybuddy-panel
+```
+
+Then type `/flybuddy`. Settings: `~/.claude/flybuddy-panel/config.json`, created on first run; see `config.example.json`. Needs macOS, the Claude desktop app, `gh` signed in, `/usr/bin/python3`.
+
+---
+
+**Français** — Un panneau pour Claude Code, affiché à côté du chat dans l'app de bureau : tes sessions Claude et les PR ouvertes d'un dépôt GitHub dans un seul tableau, trié par priorité.
 
 ![Le panneau : trois groupes, « À toi », « En cours » et « Bloqué », puis les tâches et les serveurs locaux](docs/apercu.png)
 
@@ -69,7 +81,7 @@ Au premier lancement, le panneau pose `~/.claude/flybuddy-panel/config.json`. Le
 | `consignes` | Pour réécrire ce que les boutons demandent à Claude : `tester`, `merger` et `lancer`. |
 | `qct` | Le chemin d'un script de résumé (voir plus bas), ou `false` pour s'en passer. |
 
-Un exemple :
+Un exemple (voir aussi `config.example.json`) :
 
 ```json
 {

@@ -1,0 +1,18 @@
+{
+  "titre": "My project",
+  "repo": "my-account/my-repo",
+  "depot": "~/code/my-repo",
+  "santeProd": "https://example.com/api/health",
+  "garde": "",
+  "labelOk": "",
+  "brancheProd": "main",
+  "fuseau": "Europe/Paris",
+  "joursAncien": 3,
+  "ouvrirAuto": "favorites",
+  "taches": [
+    { "court": "Next", "libelle": "What's next", "texte": "Tell me what is left to do and what to do next." }
+  ],
+  "piles": [
+    { "nom": "Web", "port": 3000, "lanceur": "web" }
+  ]
+}
