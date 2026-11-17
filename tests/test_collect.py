@@ -174,6 +174,21 @@ class Classement(unittest.TestCase):
             # Le tour est fini : elle ne travaille plus.
             ecrire({"type": "assistant", "message": {"stop_reason": "end_turn", "content": [{"type": "text"}]}})
             self.assertNotEqual(collect.classer_session(d, maintenant, trouve)["etat"], "travaille")
+            # Tour fini, mais un sous-agent lancé en fond n'a pas encore rendu : elle travaille.
+            iso = t.strftime("%Y-%m-%dT%H:%M:%SZ", t.gmtime())
+            lance = {"type": "assistant", "timestamp": iso, "message": {"stop_reason": "tool_use", "content": [
+                {"type": "tool_use", "id": "t1", "name": "Agent", "input": {"run_in_background": "true"}}]}}
+            fin = {"type": "assistant", "message": {"stop_reason": "end_turn", "content": [{"type": "text"}]}}
+            ecrire(lance, fin)
+            self.assertEqual(collect.classer_session(d, maintenant, trouve)["etat"], "travaille")
+            # Sa notification de fin est arrivée : plus rien en cours.
+            ecrire(lance, {"type": "user", "message": {"content": "<task-notification><tool-use-id>t1</tool-use-id><status>completed</status></task-notification>"}}, fin)
+            self.assertNotEqual(collect.classer_session(d, maintenant, trouve)["etat"], "travaille")
+            # Une commande de fond refusée n'a jamais tourné.
+            ecrire({"type": "assistant", "timestamp": iso, "message": {"stop_reason": "tool_use", "content": [
+                {"type": "tool_use", "id": "t2", "name": "Bash", "input": {"run_in_background": True}}]}},
+                   {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t2", "is_error": True}]}}, fin)
+            self.assertNotEqual(collect.classer_session(d, maintenant, trouve)["etat"], "travaille")
             # Un tour interrompu ne compte pas.
             ecrire({"type": "user", "message": {"content": [{"type": "text", "text": "[Request interrupted by user]"}]}})
             self.assertNotEqual(collect.classer_session(d, maintenant, trouve)["etat"], "travaille")

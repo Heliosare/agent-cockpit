@@ -109,6 +109,42 @@ def dernier_echange(chemin, octets=262144):
     return None
 
 
+def taches_de_fond(chemin, now):
+    """Le nombre de tâches de fond (sous-agent ou commande lancés « en arrière-plan ») encore en cours :
+    lancées, acceptées, sans la notification de fin. Au-delà de 12 h, on n'y croit plus."""
+    lancees, finies, refusees = {}, set(), set()
+    try:
+        with open(chemin, "rb") as f:
+            for brut in f:
+                if b"run_in_background" not in brut and b"task-notification" not in brut and b"is_error" not in brut:
+                    continue
+                # La notification de fin peut arriver sous plusieurs formes (message, file d'attente, pièce
+                # jointe) : son identifiant suffit, où qu'il soit.
+                if b"task-notification" in brut:
+                    finies.update(m.decode() for m in re.findall(rb"<tool-use-id>([^<\\]+)</tool-use-id>", brut))
+                try:
+                    x = json.loads(brut)
+                except Exception:
+                    continue
+                c = (x.get("message") or {}).get("content")
+                if x.get("type") == "assistant" and isinstance(c, list):
+                    for b in c:
+                        entree = b.get("input") or {} if isinstance(b, dict) else {}
+                        if isinstance(b, dict) and b.get("type") == "tool_use" and str(entree.get("run_in_background")).lower() == "true":
+                            lancees[b.get("id")] = iso_ms(x.get("timestamp") or "")
+                elif x.get("type") == "user":
+                    blocs = c if isinstance(c, list) else [{"type": "text", "text": c or ""}]
+                    for b in blocs:
+                        if not isinstance(b, dict):
+                            continue
+                        if b.get("type") == "tool_result" and b.get("is_error"):
+                            refusees.add(b.get("tool_use_id"))
+    except Exception:
+        return 0
+    return sum(1 for i, quand in lancees.items()
+               if i not in finies and i not in refusees and quand and now - quand < 12 * 3600 * 1000)
+
+
 def tour_en_cours(d, now, transcriptions=None):
     """Vrai si la session est au milieu d'un tour : sa transcription finit sur un appel d'outil sans
     réponse, ou sur un message auquel Claude n'a pas encore répondu, et a bougé il y a moins de 30 min.
@@ -119,12 +155,19 @@ def tour_en_cours(d, now, transcriptions=None):
     chemins = transcriptions(cli) if transcriptions else glob.glob(os.path.join(HOME, ".claude", "projects", "*", f"{cli}.jsonl"))
     for chemin in chemins:
         try:
-            if now - os.path.getmtime(chemin) * 1000 > 30 * 60 * 1000:
+            if now - os.path.getmtime(chemin) * 1000 > 12 * 3600 * 1000:
                 continue
+            recent = now - os.path.getmtime(chemin) * 1000 < 30 * 60 * 1000
         except Exception:
             continue
+        # Des sous-agents ou des commandes de fond tournent encore : la session travaille,
+        # même si son tour à elle est fini.
+        if taches_de_fond(chemin, now) > 0:
+            return True
         x = dernier_echange(chemin)
         if not x:
+            continue
+        if not recent:
             continue
         m = x.get("message") or {}
         if x.get("type") == "assistant":
