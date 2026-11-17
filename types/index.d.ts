@@ -33,6 +33,8 @@ export type Pr = {
   /** Dernière mise à jour, « jj/mm HH:MM », heure de Paris. */
   date: string
   conflit: boolean
+  /** Son merge vient d'être demandé à Claude : elle ne se coche plus. */
+  enMerge?: boolean
   /** Pas mise à jour depuis des jours. Le panneau ne range à part que celles qui seraient « bloquées ». */
   ancien?: boolean
 }
@@ -104,6 +106,8 @@ export type Vue = {
   tri: Tri
   /** Les résumés express affichés, par identifiant de session. */
   resumes: Record<string, Resume>
+  /** Les PR dont le merge vient d'être demandé, avec l'heure de la demande (ms). */
+  enMerge: Record<number, number>
 }
 
 declare module 'claude-code' {

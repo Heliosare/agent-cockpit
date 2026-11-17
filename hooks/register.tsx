@@ -13,6 +13,7 @@ const VUE_DEFAUT: Vue = {
   selection: [],
   tri: { cle: 'etat', sens: 1 },
   resumes: {},
+  enMerge: {},
 }
 
 // Change a tag when the value's fields change: it declines what an earlier
@@ -21,7 +22,7 @@ const snapshot = atom({ plugin: 'flybuddy-panel', key: 'snapshot' } as const, nu
   shape: 'snapshot-5',
 })
 const vue = atom({ plugin: 'flybuddy-panel', key: 'vue' } as const, VUE_DEFAUT, {
-  shape: 'vue-5',
+  shape: 'vue-6',
 })
 
 // What the pane offers before the person writes their own tasks in the
@@ -197,6 +198,7 @@ function etatPr(p: Pr): Etat {
 }
 
 function etatCourantPr(p: Pr): Etat {
+  if (p.enMerge) return { nom: 'Merge…', teinte: 'violet', rang: 3, groupe: 'cours' }
   if (p.brouillon) return { nom: 'Brouillon', teinte: 'gris', rang: 5, groupe: 'cours' }
   if (p.conflit) return { nom: 'Conflit', teinte: 'ambre', rang: 7, groupe: 'bloque' }
   if (GARDE_KO.includes(p.garde)) return { nom: 'Garde KO', teinte: 'rouge', rang: 6, groupe: 'bloque' }
@@ -410,6 +412,48 @@ async function oublierResume($: EngineInterface, id: string): Promise<void> {
   })
 }
 
+// How long a PR stays « Merge… » at most, if GitHub still lists it open.
+const DUREE_MERGE = 10 * 60_000
+
+// The state of these PRs on GitHub right now (OPEN, MERGED, CLOSED), read by
+// the collector; a PR it could not read is left out of the answer.
+async function etatsPr($: EngineInterface, numeros: number[]): Promise<Record<string, string>> {
+  try {
+    const { config } = await reglages($)
+    const run = await $.process.run(
+      ['/usr/bin/python3', `${$.plugin.root}/scripts/collect.py`, config, await $.session.id(), '--etat', ...numeros.map(String)],
+      { timeoutMs: 30_000 },
+    )
+    return run.exitCode === 0 ? (JSON.parse(run.stdout) as Record<string, string>) : {}
+  } catch {
+    return {}
+  }
+}
+
+// « Merger la sélection »: each ticked PR is checked again on GitHub first,
+// those already merged or closed are left out, the rest are asked of Claude,
+// shown as « Merge… » and unticked; the PR list is read again on the next
+// 30-second cycle rather than after 90 s.
+async function merger($: EngineInterface, choix: Pr[], modele: string): Promise<void> {
+  const etats = await etatsPr($, choix.map(p => p.numero))
+  const faites = choix.filter(p => ['MERGED', 'CLOSED'].includes(etats[String(p.numero)] ?? ''))
+  const reste = choix.filter(p => !faites.includes(p))
+  const maintenant = await $.clock.now()
+  await update($, vue, (x: Vue) => {
+    const enMerge = { ...(x.enMerge ?? {}) }
+    for (const p of reste) enMerge[p.numero] = maintenant
+    return { ...VUE_DEFAUT, ...x, selection: [], enMerge }
+  })
+  dernierPrs = 0
+  const deja = faites.length > 0 ? `déjà mergée${faites.length > 1 ? 's' : ''} ou fermée${faites.length > 1 ? 's' : ''} : ${faites.map(p => `#${p.numero}`).join(', ')}` : ''
+  if (reste.length === 0) {
+    $.ui.toast(`Rien à merger, ${deja}.`)
+    void rafraichir($, 'complet')
+    return
+  }
+  await envoyer($, mergerTexte(reste, modele), `merger ${reste.map(p => `#${p.numero}`).join(', ')}${deja ? ` (${deja})` : ''}`)
+}
+
 // The one way a button reaches Claude: it sends the instruction as a prompt.
 // Nothing here merges, pushes or starts a server by itself.
 async function envoyer($: EngineInterface, texte: string, libelle: string): Promise<void> {
@@ -514,7 +558,18 @@ export const register: Register = on => {
           : data.sante.ok
             ? { couleur: 'success', texte: 'Prod en ligne' }
             : { couleur: 'error', texte: `Prod en panne (${data.sante.code || 'sans réponse'})` }
-    const aFaire = resume(data.sessions, data.prs)
+    // A PR whose merge was just asked shows « Merge… » until GitHub lists it
+    // no longer, or ten minutes at most.
+    const enMerge = v.enMerge ?? {}
+    const maintenantVue = await $.clock.now().catch(() => 0)
+    const prsVues =
+      data.prs == null
+        ? data.prs
+        : data.prs.map(p => {
+            const quand = enMerge[p.numero]
+            return quand !== undefined && maintenantVue - quand < DUREE_MERGE ? { ...p, enMerge: true } : p
+          })
+    const aFaire = resume(data.sessions, prsVues)
     const consignes = { ...CONSIGNES_DEFAUT, ...(data.consignes ?? {}) }
     // The word on an approved PR: the team's own label.
     const motOk = data.labelOk || 'approuvée'
@@ -547,10 +602,10 @@ export const register: Register = on => {
     }
 
     const resumes = v.resumes ?? {}
-    const toutes = trier(lignes(data.sessions, data.prs ?? []), v.tri)
+    const toutes = trier(lignes(data.sessions, prsVues ?? []), v.tri)
     const duGroupe = (g: Groupe) => toutes.filter(l => l.etat.groupe === g)
     const nbFinies = duGroupe('fini').length
-    const ouvertes = new Set((data.prs ?? []).map(p => p.numero))
+    const ouvertes = new Set((prsVues ?? []).filter(p => !p.enMerge).map(p => p.numero))
     const choisies = v.selection.filter(n => ouvertes.has(n))
     // « À toi » always shows, even empty; what is finished or stale only on request.
     const groupes = GROUPES.filter(g =>
@@ -667,7 +722,7 @@ export const register: Register = on => {
     // The header box ticks the ready PRs in one press, except those bound for
     // prod: a release is only ever ticked by hand, one PR at a time.
     const cocherPretes = () => {
-      const pretes = (data.prs ?? []).filter(p => etatPr(p).nom === 'Prête' && !p.prod).map(p => p.numero)
+      const pretes = (prsVues ?? []).filter(p => etatPr(p).nom === 'Prête' && !p.prod).map(p => p.numero)
       if (choisies.length === 0 && pretes.length === 0) {
         $.ui.toast(`Aucune PR prête à cocher${horsProd}.`)
         return undefined
@@ -706,7 +761,9 @@ export const register: Register = on => {
       const place = 7 + (p.prod ? 5 : 0) + (p.ownerOk ? motOk.length : 0)
       const lien = <Link href={p.url}>{couper(p.titre, lettres(W - C_FIXE - place))}</Link>
       return {
-        marque: icone(
+        marque: p.enMerge ? (
+          <Text dimColor>…</Text>
+        ) : icone(
           `coche-${p.numero}`,
           estCochee ? G.coche : G.vide,
           estCochee ? `Décocher la PR #${p.numero}` : `Cocher la PR #${p.numero} pour le merge`,
@@ -1050,8 +1107,7 @@ export const register: Register = on => {
                 label={`Merger la sélection (${choisies.length})`}
                 onPress={async () => {
                   const choix = (data.prs ?? []).filter(p => choisies.includes(p.numero)).sort((a, b) => a.numero - b.numero)
-                  await envoyer($, mergerTexte(choix, consignes.merger), `merger ${choix.map(p => `#${p.numero}`).join(', ')}`)
-                  await update($, vue, (x: Vue) => ({ ...VUE_DEFAUT, ...x, selection: [] }))
+                  await merger($, choix, consignes.merger)
                 }}
               />
               <Button

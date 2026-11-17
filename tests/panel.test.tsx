@@ -98,6 +98,9 @@ const RESUME = [
   '🗂 Aucun dépôt git dans cette session',
 ].join('\n')
 
+// What GitHub answers when the panel checks PRs just before a merge.
+let etatsGitHub: Record<string, string> = {}
+
 // Nothing sits beneath the plugin: each hook here stands for the engine.
 async function lancer(
   $: any,
@@ -107,6 +110,7 @@ async function lancer(
   // What the settings file holds; `null` : there is no such file yet.
   config: string | null = CONFIG,
 ) {
+  etatsGitHub = {}
   const ran: string[][] = []
   const sent: string[] = []
   const toasts: string[] = []
@@ -145,6 +149,9 @@ async function lancer(
   on('process.run', (_: unknown, e: { argv: readonly string[] }) => {
     ran.push([...e.argv])
     const isCollect = e.argv[1]?.endsWith('collect.py')
+    if (isCollect && e.argv.includes('--etat')) {
+      return { value: { exitCode: 0, stdout: JSON.stringify(etatsGitHub), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
     // The person's `qct` script, run through a login shell.
     if (e.argv[0] === '/bin/zsh') return { value: { ...qct, isStdoutTruncated: false, isStderrTruncated: false } }
     return {
@@ -500,9 +507,7 @@ test('merge en deux temps : cocher ne fait rien, le bouton envoie la demande', a
   expect(sent[0]).not.toMatch(/\{\w+\}/)
   expect(await ui.find({ key: 'merger' })).toBeUndefined()
 
-  // La case de l'en-tête coche les PR prêtes, puis décoche tout.
-  await ui.press({ key: 'coche-pretes' })
-  expect(await libelle()).toBe('Merger la sélection (1)')
+  // La seule PR prête vient d'être envoyée au merge : la case de l'en-tête n'a plus rien à cocher.
   await ui.press({ key: 'coche-pretes' })
   expect(await ui.find({ key: 'merger' })).toBeUndefined()
   await ui.press({ key: 'coche-407' })
@@ -911,5 +916,55 @@ test('« Nettoyer » par défaut : serveurs, worktrees, bases de test, launch.js
   const ui = await $.ui.mount(pane())
   await ui.press({ key: 'tache-1' })
   expect(sent.at(-1)).toMatch(/arrête ses serveurs locaux[\s\S]*supprime le worktree[\s\S]*bases Postgres de test[\s\S]*\*_dev[\s\S]*launch\.json[\s\S]*avant et après[\s\S]*Ne pousse rien/)
+  await ui.unmount()
+})
+
+test('après « Merger la sélection » : les PR passent en « Merge… », décochées, et GitHub est relu au cycle suivant', async ($, on) => {
+  const { sent, ran, clock } = await lancer($, on)
+  const ui = await $.ui.mount(pane())
+  await ui.press({ key: 'coche-614' })
+  await ui.press({ key: 'merger' })
+  expect(sent).toHaveLength(1)
+  // L'état est relu sur GitHub juste avant, pour ces PR-là.
+  expect(ran.find(a => a.includes('--etat'))?.slice(-1)).toEqual(['614'])
+  expect(await pastille(ui, 'Merge…')).toBeTruthy()
+  // Plus de case : elle ne peut pas être cochée une seconde fois.
+  expect(await ui.find({ key: 'coche-614' })).toBeUndefined()
+  expect(await ui.find({ key: 'merger' })).toBeUndefined()
+  // La case de l'en-tête ne la recoche pas non plus.
+  await ui.press({ key: 'coche-pretes' })
+  expect(await ui.find({ key: 'merger' })).toBeUndefined()
+  // Le cycle suivant, 30 s plus tard, relit GitHub sans attendre 90 s.
+  const avant = ran.length
+  await clock.advance(30_000)
+  expect(ran.slice(avant).some(a => a.includes('--prs'))).toBe(true)
+  await ui.unmount()
+})
+
+test('une PR déjà mergée sur GitHub est retirée de la demande', async ($, on) => {
+  const { sent, toasts } = await lancer($, on)
+  etatsGitHub = { '614': 'MERGED' }
+  const ui = await $.ui.mount(pane())
+  await ui.press({ key: 'coche-614' })
+  await ui.press({ key: 'coche-429' })
+  await ui.press({ key: 'merger' })
+  expect(sent).toHaveLength(1)
+  expect(sent[0]).toMatch(/dans cet ordre : #429\./)
+  expect(sent[0]).not.toMatch(/#614/)
+  // Seule celle-là ne l'est pas : elle est la seule envoyée.
+  expect(toasts.at(-1)).toMatch(/merger #429 \(déjà mergée ou fermée : #614\)/)
+  await ui.unmount()
+})
+
+test('toutes déjà mergées : rien n\'est envoyé à Claude', async ($, on) => {
+  const { sent, toasts } = await lancer($, on)
+  etatsGitHub = { '614': 'MERGED', '429': 'CLOSED' }
+  const ui = await $.ui.mount(pane())
+  await ui.press({ key: 'coche-614' })
+  await ui.press({ key: 'coche-429' })
+  await ui.press({ key: 'merger' })
+  expect(sent).toEqual([])
+  expect(toasts.at(-1)).toBe('Rien à merger, déjà mergées ou fermées : #429, #614.')
+  expect(await ui.find({ key: 'merger' })).toBeUndefined()
   await ui.unmount()
 })

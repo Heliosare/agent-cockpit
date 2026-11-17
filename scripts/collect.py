@@ -335,6 +335,22 @@ def orphelines(piles, fermees, entrees=None):
     return out
 
 
+def etats_pr(cfg, numeros):
+    """L'état sur GitHub (OPEN, MERGED, CLOSED) de chaque PR demandée ; une PR illisible est omise."""
+    repo = str(cfg.get("repo") or "").strip()
+    out = {}
+    if not repo:
+        return out
+    for n in numeros[:20]:
+        code, txt = run(["gh", "pr", "view", str(n), "--repo", repo, "--json", "state"], timeout=20)
+        if code == 0:
+            try:
+                out[str(n)] = json.loads(txt).get("state", "")
+            except Exception:
+                pass
+    return out
+
+
 def sante(cfg):
     """L'adresse de santé réglée (« santeProd ») répond-elle ? Sans adresse réglée : `None`."""
     url = str(cfg.get("santeProd") or "").strip()
@@ -370,6 +386,14 @@ def systeme(cfg):
 def main():
     cfg_path, cli_id = sys.argv[1], sys.argv[2]
     flags = set(sys.argv[3:])
+    if "--etat" in flags:
+        # L'état actuel de quelques PR, relu juste avant un merge : {"1621": "MERGED", …}.
+        try:
+            cfg = json.load(open(cfg_path))
+        except Exception:
+            cfg = {}
+        print(json.dumps(etats_pr(cfg, [a for a in sys.argv[3:] if a.isdigit()])))
+        return
     try:
         cfg = json.load(open(cfg_path))
         cfg_err = None
