@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { CleTri, Consignes, DetailGarde, EtatSession, Pile, Pr, Resume, Session, Snapshot, Tache, Tri, Vue } from '../types'
+import type { CleTri, Consignes, DetailGarde, EtatSession, Fiche, Pile, Pr, Resume, Session, Snapshot, Tache, Tri, Vue } from '../types'
 
 const PANE = 'flybuddy'
 // The pane's title, unless the settings give another (« titre »).
@@ -17,6 +17,7 @@ const VUE_DEFAUT: Vue = {
   pilesArretees: false,
   confirmeOk: null,
   okDemande: {},
+  ouverts: [],
 }
 
 // Change a tag when the value's fields change: it declines what an earlier
@@ -24,8 +25,12 @@ const VUE_DEFAUT: Vue = {
 const snapshot = atom({ plugin: 'flybuddy-panel', key: 'snapshot' } as const, null as Snapshot | null, {
   shape: 'snapshot-5',
 })
+// Express summaries made in advance for the sessions that wait for the
+// person, shared through a file so that two panes do not make them twice.
+const fiches = atom({ plugin: 'flybuddy-panel', key: 'fiches' } as const, {} as Record<string, Fiche>, { shape: 'fiches-1' })
+
 const vue = atom({ plugin: 'flybuddy-panel', key: 'vue' } as const, VUE_DEFAUT, {
-  shape: 'vue-8',
+  shape: 'vue-9',
 })
 
 // What the pane offers before the person writes their own tasks in the
@@ -376,6 +381,7 @@ async function collecter($: EngineInterface, mode: Collecte): Promise<{ favori: 
       sante: avecPrs ? data.sante : old?.sante,
       orphelines: avecPrs ? data.orphelines : old?.orphelines,
     }))
+    void preparerResumes($, data)
     return { favori: !!data.moi?.favori }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -414,6 +420,54 @@ async function resumer($: EngineInterface, qct: string, s: Session): Promise<voi
     await poser({ etat: 'pret', texte: texte.slice(0, 1500) })
   } catch (err) {
     await poser({ etat: 'echec', texte: err instanceof Error ? err.message : String(err) })
+  }
+}
+
+// The summaries of the sessions in « À toi » are made as soon as their turn
+// ends, one at a time, once per turn: a press then only shows it.
+let preparation = false
+
+async function preparerResumes($: EngineInterface, data: Snapshot): Promise<void> {
+  if (preparation || !data.qct) return
+  preparation = true
+  try {
+    const { config } = await reglages($)
+    const fichier = config ? config.replace(/config\.json$/, 'resumes.json') : ''
+    const lire = async (): Promise<Record<string, Fiche>> => {
+      if (!fichier) return {}
+      try {
+        return JSON.parse(await $.fs.read(fichier)) as Record<string, Fiche>
+      } catch {
+        return {}
+      }
+    }
+    const aFaire = data.sessions.filter(s => etatSession(s).groupe === 'toi' && s.cli && s.activite)
+    let cache = await lire()
+    await update($, fiches, () => cache)
+    for (const s of aFaire) {
+      cache = { ...cache, ...(await lire()) }
+      const f = cache[s.id]
+      if (f && f.activite === s.activite && f.etat !== 'en cours') continue
+      // Another pane started it less than three minutes ago: leave it to it.
+      const maintenant = await $.clock.now()
+      if (f && f.etat === 'en cours' && f.activite === s.activite && maintenant - Number(f.texte || 0) < 180_000) continue
+      const poser = async (fiche: Fiche) => {
+        cache = { ...cache, ...(await lire()), [s.id]: fiche }
+        if (fichier) await $.fs.write(fichier, JSON.stringify(cache)).catch(() => undefined)
+        await update($, fiches, () => cache)
+      }
+      await poser({ etat: 'en cours', texte: String(maintenant), activite: s.activite ?? 0 })
+      try {
+        const run = await $.process.run(['/bin/zsh', '-lc', 'exec "$0" "$1"', data.qct, s.cli ?? ''], { timeoutMs: 150_000 })
+        const texte = run.stdout.trim()
+        if (run.exitCode !== 0 || !texte) throw new Error(run.stderr.trim().slice(-160) || 'aucune réponse')
+        await poser({ etat: 'pret', texte: texte.slice(0, 1500), activite: s.activite ?? 0 })
+      } catch (err) {
+        await poser({ etat: 'echec', texte: err instanceof Error ? err.message : String(err), activite: s.activite ?? 0 })
+      }
+    }
+  } finally {
+    preparation = false
   }
 }
 
@@ -909,6 +963,16 @@ export const register: Register = on => {
       }
     }
 
+    // What shows under a session: its summary made in advance (« À toi »),
+    // or the one asked by a press.
+    const fichesPretes = await read($, fiches)
+    const resumeAffiche = (s: Session): Resume | undefined => {
+      if (!(v.ouverts ?? []).includes(s.id)) return resumes[s.id]
+      const f = (fichesPretes ?? {})[s.id]
+      if (!f || f.etat === 'en cours' || f.activite !== s.activite) return { etat: 'en cours', texte: '' }
+      return { etat: f.etat, texte: f.texte }
+    }
+
     const partsSession = (s: Session) => ({
       marque: <Text dimColor>{G.session}</Text>,
       titre: titreCoupe(couper(s.titre, lettres(W - C_FIXE))),
@@ -916,7 +980,7 @@ export const register: Register = on => {
       sousTitre: null,
       detail: s.etat === 'attend toi' ? s.detail : '',
       date: s.date,
-      resume: resumes[s.id],
+      resume: resumeAffiche(s),
       suite: null as JSX.Element | null,
       actions: [
         // Where a PR has « tester », a session has its express summary.
@@ -927,6 +991,13 @@ export const register: Register = on => {
                 G.resume,
                 'Résumé express (qct)',
                 () => {
+                  // A session that waits for the person has its summary ready: the press only shows it.
+                  if (etatSession(s).groupe === 'toi') {
+                    return update($, vue, (x: Vue) => {
+                      const ouverts = x.ouverts ?? []
+                      return { ...VUE_DEFAUT, ...x, ouverts: ouverts.includes(s.id) ? ouverts.filter(i => i !== s.id) : [...ouverts, s.id] }
+                    })
+                  }
                   const r = resumes[s.id]
                   if (r?.etat === 'en cours') return undefined
                   return r ? oublierResume($, s.id) : resumer($, data.qct ?? '', s)

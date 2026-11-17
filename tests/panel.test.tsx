@@ -437,39 +437,40 @@ test('chaque icône envoie la bonne consigne, et rien ne part tout seul', async 
   const avant = ran.length
   await ui.press({ key: 'maj' })
   expect(ran.length).toBeGreaterThan(avant)
-  expect(ran.at(-1)).toContain('--prs')
+  expect(ran.filter(a => a[0] === '/usr/bin/python3').at(-1)).toContain('--prs')
   await ui.press({ key: 'config' })
   expect(ran).toContainEqual(['/usr/bin/open', '-t', '/Users/moi/.claude/flybuddy-panel/config.json'])
 
   // Le panneau ne lance que la collecte et « open » : ni git, ni gh, ni serveur.
-  for (const argv of ran) expect(['/usr/bin/python3', '/usr/bin/open']).toContain(argv[0])
+  for (const argv of ran) expect(['/usr/bin/python3', '/usr/bin/open', '/bin/zsh']).toContain(argv[0])
   await ui.unmount()
 })
 
-test('résumé express : ≡ lance qct pour cette session et montre ses lignes sous elle', async ($, on) => {
+test('résumé express : préparé d\'avance pour « À toi », le clic ne fait qu\'afficher', async ($, on) => {
   const { ran, sent } = await lancer($, on)
+  // Dès la collecte, qct a tourné pour les sessions qui t'attendent (a : t'attend, d : à relire), pas pour les autres.
+  const qct = () => ran.filter(argv => argv[0] === '/bin/zsh')
+  expect(qct().map(a => a.at(-1)).sort()).toEqual(['cli-a', 'cli-d'])
+  expect(qct()[0]?.slice(0, 4)).toEqual(['/bin/zsh', '-lc', 'exec "$0" "$1"', '/chemin/qct'])
   const ui = await $.ui.mount(pane())
-  // Là où une PR a « tester », une session a son résumé express.
   expect((await ui.find({ key: 'qct-local_a' }))?.props.label).toBe('≡')
   expect(await ui.find({ key: 'qct-pr-614' })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /≡ résumé express/ })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: /Ne la ferme pas encore/ })).toBeUndefined()
-
+  // Le clic affiche, sans relancer qct.
   await ui.press({ key: 'qct-local_a' })
-  // qct reçoit l'identifiant Claude de cette session, pas un autre.
-  expect(ran).toContainEqual(['/bin/zsh', '-lc', 'exec "$0" "$1"', '/chemin/qct', 'cli-a'])
   expect(await ui.find({ type: 'Text', text: '📌 Bug prod : une question attend ta réponse.' })).toBeTruthy()
-  expect(await ui.find({ type: 'Text', text: /Ne la ferme pas encore/ })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: '🗂 Aucun dépôt git dans cette session' })).toBeTruthy()
-  // Rien n'est envoyé à Claude : le résumé se lit dans le panneau.
+  expect(qct()).toHaveLength(2)
   expect(sent).toEqual([])
-
-  // Trier ne le fait pas disparaître ; un second appui le referme.
+  // Trier le garde, un second appui le replie.
   await ui.press({ key: 'tri-date' })
   expect(await ui.find({ type: 'Text', text: /Ne la ferme pas encore/ })).toBeTruthy()
   await ui.press({ key: 'qct-local_a' })
   expect(await ui.find({ type: 'Text', text: /Ne la ferme pas encore/ })).toBeUndefined()
-  expect(ran.filter(argv => argv[0] === '/bin/zsh')).toHaveLength(1)
+  // Une session qui travaille : le clic le demande, à ce moment-là.
+  await ui.press({ key: 'qct-local_b' })
+  expect(qct().at(-1)?.at(-1)).toBe('cli-b')
+  expect(qct()).toHaveLength(3)
   await ui.unmount()
 })
 
@@ -525,7 +526,7 @@ test('merge en deux temps : cocher ne fait rien, le bouton envoie la demande', a
   await ui.press({ key: 'decocher' })
   expect(await ui.find({ key: 'merger' })).toBeUndefined()
   expect(sent).toHaveLength(1)
-  for (const argv of ran) expect(['/usr/bin/python3', '/usr/bin/open']).toContain(argv[0])
+  for (const argv of ran) expect(['/usr/bin/python3', '/usr/bin/open', '/bin/zsh']).toContain(argv[0])
   await ui.unmount()
 })
 
@@ -582,19 +583,20 @@ test('panneau étroit et terminal : mêmes groupes, mêmes commandes', async ($,
 })
 
 test('se rafraîchit tout seul : cet ordinateur toutes les 30 s, GitHub toutes les 90 s', async ($, on) => {
-  const { ran, clock } = await lancer($, on)
+  const { ran: tout, clock } = await lancer($, on)
+  const ran = { get length() { return tout.filter(a => a[0] === '/usr/bin/python3').length }, at: (i: number) => tout.filter(a => a[0] === '/usr/bin/python3').at(i) }
   const depart = ran.length
   await clock.advance(30_000)
-  expect(ran).toHaveLength(depart + 1)
+  expect(ran.length).toBe(depart + 1)
   expect(ran.at(-1)).not.toContain('--prs')
   await clock.advance(30_000)
-  expect(ran).toHaveLength(depart + 2)
+  expect(ran.length).toBe(depart + 2)
   expect(ran.at(-1)).not.toContain('--prs')
   await clock.advance(30_000)
-  expect(ran).toHaveLength(depart + 3)
+  expect(ran.length).toBe(depart + 3)
   expect(ran.at(-1)).toContain('--prs')
   expect(ran.at(-1)).toContain('--sante')
-  for (const argv of ran) expect(argv[0]).toBe('/usr/bin/python3')
+  for (const argv of tout) expect(['/usr/bin/python3', '/bin/zsh']).toContain(argv[0])
 })
 
 test('réduit en vignette : un résumé, aucun bouton', async ($, on) => {
@@ -840,7 +842,7 @@ test('les réglages réécrivent le titre et les consignes ; celles qui manquent
     'Lance la pile locale « Web » (port 3000) avec preview_start, entrée « web-dev » de ~/.claude/launch.json. Ne pousse rien.',
   )
   // Réécrites ou non, les consignes ne font que partir vers Claude.
-  for (const argv of ran) expect(['/usr/bin/python3', '/usr/bin/open']).toContain(argv[0])
+  for (const argv of ran) expect(['/usr/bin/python3', '/usr/bin/open', '/bin/zsh']).toContain(argv[0])
   await ui.unmount()
 })
 
@@ -1012,7 +1014,7 @@ test('localhost : une pastille par pile qui tourne, les ports secondaires en dé
   expect(await ui.find({ key: 'arreter-3000' })).toBeTruthy()
   await ui.press({ key: 'arreter-4001' })
   expect(sent.at(-1)).toMatch(/Arrête la pile locale « essai » \(ports 4002, 4001, 6400\)[\s\S]*preview_stop[\s\S]*Ne supprime rien, ne pousse rien/)
-  for (const argv of ran) expect(['/usr/bin/python3', '/usr/bin/open']).toContain(argv[0])
+  for (const argv of ran) expect(['/usr/bin/python3', '/usr/bin/open', '/bin/zsh']).toContain(argv[0])
   await ui.unmount()
 })
 
@@ -1043,7 +1045,7 @@ test('bouton du label d\'approbation : seulement sous une PR dont la garde est r
   // Ensuite la ligne dit que c'est demandé, et le bouton disparaît.
   expect(await ui.find({ type: 'Text', text: 'ok-equipe demandé' })).toBeTruthy()
   expect(await ui.find({ key: 'ok-407' })).toBeUndefined()
-  for (const argv of ran) expect(['/usr/bin/python3', '/usr/bin/open']).toContain(argv[0])
+  for (const argv of ran) expect(['/usr/bin/python3', '/usr/bin/open', '/bin/zsh']).toContain(argv[0])
   await ui.unmount()
 })
 

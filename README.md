@@ -119,7 +119,7 @@ Une consigne est un texte à trous. Le panneau remplit les trous puis envoie le 
 
 ### Le résumé express
 
-Si un script exécutable se trouve à `~/.claude/skills/qct/qct`, ou au chemin donné par `qct`, chaque session reçoit un bouton ≡. Le panneau lance ce script avec l'identifiant de la session et montre sous la ligne ce qu'il imprime. Sans script, pas de bouton.
+Si un script exécutable se trouve à `~/.claude/skills/qct/qct`, ou au chemin donné par `qct`, chaque session reçoit un bouton ≡. Pour les sessions de « À toi », le panneau lance ce script dès que leur tour se termine, une fois par tour, et garde le résultat dans `~/.claude/flybuddy-panel/resumes.json` : le bouton ne fait qu'afficher. Pour les autres sessions, le bouton le lance à la demande. Sans script, pas de bouton.
 
 ## Développer
 

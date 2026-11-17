@@ -99,6 +99,9 @@ export type DetailGarde = { etat: 'en cours' | 'pret' | 'echec'; fichiers: { fic
 /** Le résumé express d'une session, demandé depuis sa ligne. */
 export type Resume = { etat: 'en cours' | 'pret' | 'echec'; texte: string }
 
+/** Un résumé express préparé d'avance, pour l'activité de la session qu'il résume. */
+export type Fiche = Resume & { activite: number }
+
 /** La colonne qui ordonne les lignes à l'intérieur de chaque groupe. */
 export type CleTri = 'etat' | 'titre' | 'date'
 /** `sens` : 1 croissant, -1 décroissant. */
@@ -119,6 +122,8 @@ export type Vue = {
   okDemande: Record<number, number>
   /** Les piles arrêtées sont dépliées sous « Localhost ». */
   pilesArretees: boolean
+  /** Les sessions dont le résumé préparé d'avance est affiché sous la ligne. */
+  ouverts: string[]
   /** Les PR dont le merge vient d'être demandé, avec l'heure de la demande (ms). */
   enMerge: Record<number, number>
 }
@@ -128,6 +133,7 @@ declare module 'claude-code' {
     'flybuddy-panel': {
       snapshot: Shaped<Snapshot | null>
       vue: Shaped<Vue>
+      fiches: Shaped<Record<string, Fiche>>
     }
   }
 }
