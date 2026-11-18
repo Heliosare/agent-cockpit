@@ -146,12 +146,13 @@ def taches_de_fond(chemin, now):
 
 
 def tour_en_cours(d, now, transcriptions=None):
-    """Vrai si la session est au milieu d'un tour : sa transcription finit sur un appel d'outil sans
-    réponse, ou sur un message auquel Claude n'a pas encore répondu, et a bougé il y a moins de 30 min.
+    """Pourquoi la session est au milieu d'un tour, ou "" si elle ne l'est pas : sa transcription finit sur
+    un appel d'outil sans réponse, ou sur un message auquel Claude n'a pas encore répondu, et a bougé il y a
+    moins de 30 min ; ou des tâches de fond tournent encore.
     (Un long outil ne bouge pas le reste du fichier de la session : seul ce signe le voit.)"""
     cli = d.get("cliSessionId")
     if not cli:
-        return False
+        return ""
     chemins = transcriptions(cli) if transcriptions else glob.glob(os.path.join(HOME, ".claude", "projects", "*", f"{cli}.jsonl"))
     for chemin in chemins:
         try:
@@ -162,8 +163,9 @@ def tour_en_cours(d, now, transcriptions=None):
             continue
         # Des sous-agents ou des commandes de fond tournent encore : la session travaille,
         # même si son tour à elle est fini.
-        if taches_de_fond(chemin, now) > 0:
-            return True
+        n = taches_de_fond(chemin, now)
+        if n > 0:
+            return f"{n} tâche{'s' if n > 1 else ''} de fond en cours (sous-agent ou commande)"
         x = dernier_echange(chemin)
         if not x:
             continue
@@ -172,13 +174,13 @@ def tour_en_cours(d, now, transcriptions=None):
         m = x.get("message") or {}
         if x.get("type") == "assistant":
             if m.get("stop_reason") in ("tool_use", None):
-                return True
+                return "un outil tourne, sa réponse n'est pas encore arrivée"
         else:
             c = m.get("content")
             texte = c if isinstance(c, str) else " ".join(str(b.get("text", "")) for b in (c or []) if isinstance(b, dict))
             if "Request interrupted" not in texte:
-                return True
-    return False
+                return "Claude n'a pas encore répondu au dernier message"
+    return ""
 
 
 def classer_session(d, now, transcriptions=None):
@@ -189,28 +191,34 @@ def classer_session(d, now, transcriptions=None):
     # Un résumé qui ne porte pas sur le dernier message ne dit plus rien de l'état.
     fresh = d.get("postTurnSummaryFor") == d.get("lastAssistantUuid")
     cat = s.get("status_category") if fresh else None
-    if (act > edge + 1500 and now - act < 15 * 60 * 1000) or tour_en_cours(d, now, transcriptions):
-        etat = "travaille"
+    depuis = f" depuis {date_courte(edge or act)[-5:]}" if (edge or act) else ""
+    en_cours = tour_en_cours(d, now, transcriptions)
+    if act > edge + 1500 and now - act < 15 * 60 * 1000:
+        etat, raison = "travaille", "son tour est en cours"
+    elif en_cours:
+        etat, raison = "travaille", en_cours
     elif cat == "blocked" or d.get("interruptedAwaitingPerson"):
-        etat = "attend toi"
+        etat, raison = "attend toi", f"elle t'a posé une question{depuis}"
     elif cat == "review_ready" or (fresh and s.get("needs_action")):
-        etat = "à relire"
+        etat, raison = "à relire", f"son tour est fini{depuis}, elle a quelque chose à te montrer"
     elif cat == "completed":
-        etat = "fini"
+        etat, raison = "fini", f"elle a dit avoir terminé{depuis}"
     else:
-        etat = "inactif"
+        etat, raison = "inactif", f"rien de neuf{depuis}, et son dernier tour ne demande rien"
     # Ses propres PR sont toutes mergées ou fermées : le travail est livré, même si
     # son dernier message posait encore une question. C'est aussi ce que l'app appelle « done ».
     propres = [p for p in (d.get("prs") or []) if p.get("own")]
     livree = bool(propres) and all((p.get("state") or "").upper() in LIVREES for p in propres)
     if livree and etat in ("attend toi", "à relire", "inactif"):
-        etat = "fini"
+        etat, raison = "fini", "ses PR sont toutes mergées ou fermées"
     return {
         "id": d.get("sessionId"),
         # L'identifiant Claude de la session : ce que « qct » attend pour la résumer.
         "cli": d.get("cliSessionId") or "",
         "titre": (d.get("title") or "Sans titre")[:80],
         "etat": etat,
+        # Pourquoi cet état : ce que le panneau dit au survol de la pastille.
+        "raison": raison,
         "detail": masque((s.get("needs_action") or s.get("status_detail") or "")[:140]) if fresh else "",
         "minutes": int((now - act) / 60000) if act else None,
         "activite": act or None,

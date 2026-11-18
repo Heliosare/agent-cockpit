@@ -116,6 +116,7 @@ async function lancer(
   const toasts: string[] = []
   const ecrits: { path: string; text: string }[] = []
   const titres: string[] = []
+  const envois: { to: unknown; text: string }[] = []
   let opened = 0
   // The person's home: the settings live under it, wherever it is.
   mock.env(on, { HOME: '/Users/moi' })
@@ -168,6 +169,10 @@ async function lancer(
       },
     }
   })
+  on('session.send', (_: unknown, e: { to: unknown; text: string }) => {
+    envois.push({ to: e.to, text: e.text })
+    return { isDelivered: true }
+  })
   on('prompt.submit', (_: unknown, e: { text: string }) => {
     sent.push(e.text)
     return { text: e.text }
@@ -182,7 +187,7 @@ async function lancer(
   // One more beat: the answer of that collect has to reach the state.
   await new Promise<void>(r => setTimeout(() => r(), 20))
   await clock.settle()
-  return { ran, sent, toasts, ecrits, titres, clock, opened: () => opened }
+  return { ran, sent, toasts, ecrits, titres, envois, clock, opened: () => opened }
 }
 
 // The rows of the board, in the order drawn: a session by its title, a PR by its number.
@@ -1054,5 +1059,38 @@ test('sans label d\'approbation réglé, pas de bouton', async ($, on) => {
   await lancer($, on, { ...SNAP, labelOk: '' })
   const ui = await $.ui.mount(pane())
   expect(await ui.find({ key: 'ok-407' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('répondre depuis le panneau : sous une session qui attend, un bouton par réponse, envoyé à cette session', async ($, on) => {
+  const { envois, sent, toasts } = await lancer($, on)
+  const ui = await $.ui.mount(pane())
+  // Seulement sous la session qui a posé une question (a), pas sous celle à relire (d).
+  expect((await ui.find({ key: 'rep-local_a-0' }))?.props.label).toBe('Oui')
+  expect((await ui.find({ key: 'rep-local_a-2' }))?.props.label).toBe('Suis ta recommandation')
+  expect(await ui.find({ key: 'rep-local_d-0' })).toBeUndefined()
+  await ui.press({ key: 'rep-local_a-1' })
+  expect(envois).toHaveLength(1)
+  expect(JSON.stringify(envois[0]?.to)).toContain('local_a')
+  expect(envois[0]?.text).toBe("Réponse de l'utilisateur à ta question « réponds à la question », donnée par un bouton de son panneau de bord : Non.")
+  expect(toasts.at(-1)).toBe('Réponse envoyée : Non')
+  // Rien ne part vers la session en cours ; les boutons laissent place à ce qui a été envoyé.
+  expect(sent).toEqual([])
+  expect(await ui.find({ type: 'Text', text: 'Réponse envoyée : Non' })).toBeTruthy()
+  expect(await ui.find({ key: 'rep-local_a-0' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('au survol d\'une pastille : pourquoi cet état', async ($, on) => {
+  const snap = { ...SNAP, sessions: SNAP.sessions.map(s => (s.id === 'local_b' ? { ...s, raison: '2 tâches de fond en cours' } : s)) }
+  await lancer($, on, snap)
+  const ui = await $.ui.mount(pane())
+  const cartes = (await ui.findAll({ type: 'Text' }))
+    .filter((t: { props: { color?: string } }) => t.props.color === 'inverseText')
+    .map((c: { text: string }) => c.text.replace(/\s/g, ' ').trim())
+  expect(cartes).toContain('2 tâches de fond en cours')
+  expect(cartes).toContain('Elle est en conflit avec dev')
+  expect(cartes).toContain('Ses contrôles sont verts et elle est mergeable')
+  // Une ligne par carte : aucune ne peut se couper.
   await ui.unmount()
 })

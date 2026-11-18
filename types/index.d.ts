@@ -6,6 +6,8 @@ export type Session = {
   cli?: string
   titre: string
   etat: EtatSession
+  /** Pourquoi cet état, en une phrase (au survol de la pastille). */
+  raison?: string
   detail: string
   minutes: number | null
   favori: boolean
@@ -88,6 +90,8 @@ export type Snapshot = {
   avecProd?: boolean
   /** Les demandes « tester », « merger », « lancer » réécrites dans les réglages. */
   consignes?: Consignes
+  /** Les réponses proposées sous une session qui attend (réglage « reponses »). */
+  reponses?: string[]
 }
 
 /** Ce qu'un bouton demande à Claude : un texte à trous, voir CONSIGNES_DEFAUT. */
@@ -122,6 +126,8 @@ export type Vue = {
   okDemande: Record<number, number>
   /** Les piles arrêtées sont dépliées sous « Localhost ». */
   pilesArretees: boolean
+  /** Les sessions auxquelles une réponse a été envoyée depuis le panneau : le mot envoyé, et l'activité de la session à ce moment. */
+  repondu: Record<string, { mot: string; activite: number }>
   /** Les sessions dont le résumé préparé d'avance est affiché sous la ligne. */
   ouverts: string[]
   /** Les PR dont le merge vient d'être demandé, avec l'heure de la demande (ms). */

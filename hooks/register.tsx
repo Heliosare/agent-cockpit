@@ -18,19 +18,20 @@ const VUE_DEFAUT: Vue = {
   confirmeOk: null,
   okDemande: {},
   ouverts: [],
+  repondu: {},
 }
 
 // Change a tag when the value's fields change: it declines what an earlier
 // version stored, which outlives a reload.
 const snapshot = atom({ plugin: 'flybuddy-panel', key: 'snapshot' } as const, null as Snapshot | null, {
-  shape: 'snapshot-5',
+  shape: 'snapshot-6',
 })
 // Express summaries made in advance for the sessions that wait for the
 // person, shared through a file so that two panes do not make them twice.
 const fiches = atom({ plugin: 'flybuddy-panel', key: 'fiches' } as const, {} as Record<string, Fiche>, { shape: 'fiches-1' })
 
 const vue = atom({ plugin: 'flybuddy-panel', key: 'vue' } as const, VUE_DEFAUT, {
-  shape: 'vue-9',
+  shape: 'vue-10',
 })
 
 // What the pane offers before the person writes their own tasks in the
@@ -74,7 +75,11 @@ type Config = {
   ouvrirAuto?: 'favorites' | 'toujours' | 'jamais'
   taches?: Tache[]
   consignes?: Consignes
+  reponses?: string[]
 }
+
+// The answers offered under a session that waits, unless the settings give others (« reponses »).
+const REPONSES_DEFAUT = ['Oui', 'Non', 'Suis ta recommandation']
 
 // The settings file laid on a first run, for the person to fill in. Nothing
 // in it names a repository, a site or a folder: those are theirs to give.
@@ -377,6 +382,7 @@ async function collecter($: EngineInterface, mode: Collecte): Promise<{ favori: 
       ...data,
       taches,
       consignes: cfg.consignes,
+      reponses: Array.isArray(cfg.reponses) && cfg.reponses.length ? cfg.reponses.map(String).slice(0, 5) : REPONSES_DEFAUT,
       prs: avecPrs ? data.prs : old?.prs,
       sante: avecPrs ? data.sante : old?.sante,
       orphelines: avecPrs ? data.orphelines : old?.orphelines,
@@ -561,6 +567,39 @@ async function merger($: EngineInterface, choix: Pr[], modele: string): Promise<
   await envoyer($, mergerTexte(reste, modele), `merger ${reste.map(p => `#${p.numero}`).join(', ')}${deja ? ` (${deja})` : ''}`)
 }
 
+// An answer to a session that waits, sent from the pane to that session. It
+// reaches it as a message from this pane, saying which button the person
+// pressed and for which question: the session decides what it makes of it.
+async function repondre($: EngineInterface, s: Session, mot: string): Promise<void> {
+  const question = s.detail ? ` à ta question « ${s.detail} »` : ''
+  const texte = `Réponse de l'utilisateur${question}, donnée par un bouton de son panneau de bord : ${mot}.`
+  try {
+    const r = await $.session.send({ to: { sessionId: s.id }, text: texte })
+    if (!r.isDelivered) throw new Error(r.reason || 'refusée')
+    await update($, vue, (x: Vue) => ({
+      ...VUE_DEFAUT,
+      ...x,
+      repondu: { ...(x.repondu ?? {}), [s.id]: { mot, activite: s.activite ?? 0 } },
+    }))
+    $.ui.toast(`Réponse envoyée : ${mot}`)
+  } catch (err) {
+    $.ui.toast(`Réponse non envoyée : ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
+// Why a PR is in its state, in one sentence.
+function raisonPr(p: Pr): string {
+  if (p.enMerge) return 'son merge vient d’être demandé à Claude'
+  if (p.brouillon) return 'c’est encore un brouillon'
+  if (p.conflit) return `elle est en conflit avec ${p.base}`
+  if (GARDE_KO.includes(p.garde)) return 'le contrôle exigé avant un merge (la garde) est rouge'
+  if (p.ci === 'rouge') return 'au moins un contrôle est rouge'
+  if (p.ci === 'en cours' || p.garde === 'en cours') return 'ses contrôles tournent encore'
+  if (p.ci === 'vert' && p.garde !== 'ok' && p.garde !== 'non demandée') return 'ses contrôles sont verts, mais la garde n’a pas tourné'
+  if (p.ci === 'aucune' && p.garde !== 'non demandée') return 'aucun contrôle n’a tourné'
+  return 'ses contrôles sont verts et elle est mergeable'
+}
+
 // The one way a button reaches Claude: it sends the instruction as a prompt.
 // Nothing here merges, pushes or starts a server by itself.
 async function envoyer($: EngineInterface, texte: string, libelle: string): Promise<void> {
@@ -729,7 +768,7 @@ export const register: Register = on => {
 
     // A state: the mockup's pill, a word in small semibold type on its tint,
     // in a rounded line of the same tint.
-    const pastille = (etat: Etat) => {
+    const pastille = (etat: Etat, raison = '', cle = '') => {
       if (terminal) {
         return (
           <Text color={CLE_THEME[etat.teinte]} inverse>
@@ -738,7 +777,7 @@ export const register: Register = on => {
         )
       }
       const teinte = pal.pastilles[etat.teinte]
-      return (
+      const pilule = (
         <Box
           borderStyle="round"
           borderColor={teinte.fond}
@@ -750,6 +789,18 @@ export const register: Register = on => {
           <Text size="caption" weight="semibold" color={teinte.texte}>
             {insecable(etat.nom)}
           </Text>
+        </Box>
+      )
+      if (!raison) return pilule
+      // Why this state: a card over the row above while the pointer is on the pill.
+      return (
+        <Box key={`pourquoi-${cle}`} flexShrink={0}>
+          {pilule}
+          <Box position="absolute" top={-1} left={0} display="none" hover={{ display: 'flex' }}>
+            <Text color="inverseText" backgroundColor="text">
+              {`${ESPACE}${insecable(raison.charAt(0).toUpperCase() + raison.slice(1))}${ESPACE}`}
+            </Text>
+          </Box>
         </Box>
       )
     }
@@ -962,6 +1013,7 @@ export const register: Register = on => {
         detail: '',
         date: p.date,
         resume: undefined as Resume | undefined,
+        reponses: null as JSX.Element | null,
         suite: suitePr(p),
         actions: [
           icone(
@@ -992,6 +1044,28 @@ export const register: Register = on => {
       return resumes[s.id]
     }
 
+    // Under a session that asked something: the answers, one press each; then
+    // what was sent, until the session moves again.
+    const reponsesSession = (s: Session): JSX.Element | null => {
+      if (s.etat !== 'attend toi') return null
+      const r = (v.repondu ?? {})[s.id]
+      if (r && r.activite === (s.activite ?? 0)) {
+        return (
+          <Text size="footnote" color="success">
+            {`Réponse envoyée : ${r.mot}`}
+          </Text>
+        )
+      }
+      return (
+        <Box flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={1} rowGap="xs">
+          <Text dimColor size="footnote">
+            Répondre :
+          </Text>
+          {(data.reponses ?? REPONSES_DEFAUT).map((mot, i) => puce(`rep-${s.id}-${i}`, mot, () => repondre($, s, mot)))}
+        </Box>
+      )
+    }
+
     const partsSession = (s: Session) => ({
       marque: <Text dimColor>{G.session}</Text>,
       titre: titreCoupe(couper(s.titre, lettres(W - C_FIXE))),
@@ -1000,6 +1074,7 @@ export const register: Register = on => {
       detail: s.etat === 'attend toi' ? s.detail : '',
       date: s.date,
       resume: resumeAffiche(s),
+      reponses: reponsesSession(s),
       suite: null as JSX.Element | null,
       actions: [
         // Where a PR has « tester », a session has its express summary.
@@ -1091,13 +1166,14 @@ export const register: Register = on => {
               {parts.titreSeul}
             </Box>
             <Box flexDirection="row" alignItems="center" gap={1} paddingLeft={C_MARQUE + 1}>
-              {pastille(l.etat)}
+              {pastille(l.etat, l.sorte === 'pr' ? raisonPr(l.p) : (l.s.raison ?? ''), l.cle)}
               {parts.sousTitre}
               {date}
               <Box flexGrow={1} />
               {parts.actions}
             </Box>
             {demande(C_MARQUE + 1)}
+            {parts.reponses ? <Box paddingLeft={C_MARQUE + 1}>{parts.reponses}</Box> : null}
             {resume(C_MARQUE + 1)}
             {parts.suite ? <Box paddingLeft={C_MARQUE + 1}>{parts.suite}</Box> : null}
           </Box>
@@ -1110,7 +1186,7 @@ export const register: Register = on => {
               {parts.marque}
             </Box>
             <Box width={C_ETAT} flexShrink={0} alignItems="center">
-              {pastille(l.etat)}
+              {pastille(l.etat, l.sorte === 'pr' ? raisonPr(l.p) : (l.s.raison ?? ''), l.cle)}
             </Box>
             {parts.titre}
             <Box width={C_DATE} flexShrink={0}>
@@ -1121,6 +1197,7 @@ export const register: Register = on => {
             </Box>
           </Box>
           {demande(C_MARQUE + C_ETAT + 2)}
+          {parts.reponses ? <Box paddingLeft={C_MARQUE + C_ETAT + 2}>{parts.reponses}</Box> : null}
           {resume(C_MARQUE + C_ETAT + 2)}
           {parts.suite ? <Box paddingLeft={C_MARQUE + C_ETAT + 2}>{parts.suite}</Box> : null}
         </Box>
