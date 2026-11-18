@@ -163,6 +163,16 @@ def tour_en_cours(d, now, transcriptions=None):
             continue
         # Des sous-agents ou des commandes de fond tournent encore : la session travaille,
         # même si son tour à elle est fini.
+        # Un sous-agent écrit encore sa propre transcription (relancé après avoir rendu, par exemple).
+        actifs = 0
+        for f in glob.glob(os.path.join(chemin[:-len(".jsonl")], "subagents", "agent-*.jsonl")):
+            try:
+                if now - os.path.getmtime(f) * 1000 < 3 * 60 * 1000:
+                    actifs += 1
+            except Exception:
+                pass
+        if actifs:
+            return f"{actifs} sous-agent{'s' if actifs > 1 else ''} au travail en ce moment"
         n = taches_de_fond(chemin, now)
         if n > 0:
             return f"{n} tâche{'s' if n > 1 else ''} de fond en cours (sous-agent ou commande)"

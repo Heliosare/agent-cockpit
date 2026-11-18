@@ -189,6 +189,17 @@ class Classement(unittest.TestCase):
                 {"type": "tool_use", "id": "t2", "name": "Bash", "input": {"run_in_background": True}}]}},
                    {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t2", "is_error": True}]}}, fin)
             self.assertNotEqual(collect.classer_session(d, maintenant, trouve)["etat"], "travaille")
+            # Tour fini, mais un sous-agent écrit encore sa transcription : elle travaille.
+            ecrire(fin)
+            os.makedirs(os.path.join(dossier, "cli", "subagents"))
+            sous = os.path.join(dossier, "cli", "subagents", "agent-1.jsonl")
+            open(sous, "w").write("{}\n")
+            r = collect.classer_session(d, maintenant, trouve)
+            self.assertEqual(r["etat"], "travaille")
+            self.assertIn("sous-agent", r["raison"])
+            # Il s'est tu depuis dix minutes : plus rien.
+            os.utime(sous, (maintenant / 1000 - 600, maintenant / 1000 - 600))
+            self.assertNotEqual(collect.classer_session(d, maintenant, trouve)["etat"], "travaille")
             # Un tour interrompu ne compte pas.
             ecrire({"type": "user", "message": {"content": [{"type": "text", "text": "[Request interrupted by user]"}]}})
             self.assertNotEqual(collect.classer_session(d, maintenant, trouve)["etat"], "travaille")
