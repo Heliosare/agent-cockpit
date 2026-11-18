@@ -1101,6 +1101,8 @@ test('une session suivie reste visible une fois finie, dans « Suivi »', async 
   const ui = await $.ui.mount(pane())
   expect(await ui.find({ type: 'Text', text: 'SUIVI' })).toBeTruthy()
   expect(await rangs(ui)).toContain('Vieux')
+  // « Suivi » vient juste après « À toi », avant « En cours ».
+  expect((await rangs(ui)).indexOf('Vieux')).toBeLessThan((await rangs(ui)).indexOf('Release'))
   // Elle n'est plus comptée avec les terminées repliées.
   expect(await ui.find({ key: 'toutes' })).toBeUndefined()
   await ui.unmount()

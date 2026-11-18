@@ -32,7 +32,7 @@ const snapshot = atom({ plugin: 'agent-cockpit', key: 'snapshot' } as const, nul
 const fiches = atom({ plugin: 'agent-cockpit', key: 'fiches' } as const, {} as Record<string, Fiche>, { shape: 'fiches-1' })
 
 const vue = atom({ plugin: 'agent-cockpit', key: 'vue' } as const, VUE_DEFAUT, {
-  shape: 'vue-11',
+  shape: 'vue-12',
 })
 
 // What the pane offers before the person writes their own tasks in the
@@ -184,9 +184,9 @@ type Groupe = 'toi' | 'cours' | 'bloque' | 'suivi' | 'fini'
 type DefGroupe = { cle: Groupe; nom: string; aide: string }
 const GROUPES: DefGroupe[] = [
   { cle: 'toi', nom: 'À toi', aide: 'ta réponse, ta relecture ou ton merge' },
+  { cle: 'suivi', nom: 'Suivi', aide: 'les sessions que tu suis, une fois leur tour fini' },
   { cle: 'cours', nom: 'En cours', aide: "rien à faire pour l'instant" },
   { cle: 'bloque', nom: 'Bloqué', aide: 'CI rouge ou conflit' },
-  { cle: 'suivi', nom: 'Suivi', aide: 'terminées, gardées sous les yeux' },
   { cle: 'fini', nom: 'Terminé ou ancien', aide: 'sessions finies, PR bloquées sans suite depuis des jours' },
 ]
 

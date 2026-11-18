@@ -250,6 +250,9 @@ def sessions(cli_id, suivre=()):
         suivie = est_suivie(d.get("title"), suivre)
         if d.get("isArchived") and not suivie:
             continue
+        # Archivée et sans activité depuis trois jours : elle a fait son temps, même suivie.
+        if d.get("isArchived") and now - (d.get("lastActivityAt") or 0) > 3 * JOUR:
+            continue
         s = classer_session(d, now)
         s["suivi"] = suivie
         # Archivée mais encore au travail ou en attente de toi : son vrai état prime.
