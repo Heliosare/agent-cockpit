@@ -227,7 +227,13 @@ def classer_session(d, now, transcriptions=None):
     }
 
 
-def sessions(cli_id):
+def est_suivie(titre, prefixes):
+    """Vrai si le titre commence par l'un des débuts à suivre (réglage « suivre »), sans tenir compte de la casse."""
+    t = str(titre or "").strip().lower()
+    return any(t.startswith(str(p).strip().lower()) for p in prefixes if str(p).strip())
+
+
+def sessions(cli_id, suivre=()):
     out, me = [], {"favori": False}
     now = time.time() * 1000
     for f in glob.glob(os.path.join(SESSIONS, "*", "*", "local_*.json")):
@@ -239,9 +245,15 @@ def sessions(cli_id):
             # La session qui affiche le panneau : inutile de la lister chez elle.
             me = {"favori": bool(d.get("isStarred")), "id": d.get("sessionId")}
             continue
-        if d.get("isArchived"):
+        # Une session suivie (réglage « suivre ») reste au tableau même finie, même archivée.
+        suivie = est_suivie(d.get("title"), suivre)
+        if d.get("isArchived") and not suivie:
             continue
-        out.append(classer_session(d, now))
+        s = classer_session(d, now)
+        s["suivi"] = suivie
+        if d.get("isArchived"):
+            s["etat"], s["raison"] = "fini", "elle est archivée, et gardée ici parce que tu la suis"
+        out.append(s)
     rang = {"attend toi": 0, "travaille": 1, "à relire": 2, "fini": 3, "inactif": 4}
     out.sort(key=lambda x: (rang[x["etat"]], x["minutes"] if x["minutes"] is not None else 1e9))
     return out, me
@@ -577,7 +589,8 @@ def main():
     except Exception:
         jours = 3
     regler_fuseau(cfg.get("fuseau"))
-    sess, me = sessions(cli_id)
+    suivre = cfg.get("suivre") or []
+    sess, me = sessions(cli_id, suivre if isinstance(suivre, list) else [suivre])
     piles, autres = localhost(cfg, ports_ecoute())
     data = {"sessions": sess, "moi": me, "piles": piles, "autresPiles": autres,
             "systeme": systeme(cfg), "configErreur": cfg_err, "heure": time.strftime("%H:%M:%S"),

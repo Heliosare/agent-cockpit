@@ -179,12 +179,13 @@ const CLE_THEME: Record<NomTeinte, string> = {
 
 // The board is sorted by priority: what waits for the person, what runs by
 // itself, what is stuck. What is finished or stale comes last, on request.
-type Groupe = 'toi' | 'cours' | 'bloque' | 'fini'
+type Groupe = 'toi' | 'cours' | 'bloque' | 'suivi' | 'fini'
 type DefGroupe = { cle: Groupe; nom: string; aide: string }
 const GROUPES: DefGroupe[] = [
   { cle: 'toi', nom: 'À toi', aide: 'ta réponse, ta relecture ou ton merge' },
   { cle: 'cours', nom: 'En cours', aide: "rien à faire pour l'instant" },
   { cle: 'bloque', nom: 'Bloqué', aide: 'CI rouge ou conflit' },
+  { cle: 'suivi', nom: 'Suivi', aide: 'terminées, gardées sous les yeux' },
   { cle: 'fini', nom: 'Terminé ou ancien', aide: 'sessions finies, PR bloquées sans suite depuis des jours' },
 ]
 
@@ -201,7 +202,9 @@ const ETATS_SESSION: Record<EtatSession, Etat> = {
 }
 
 function etatSession(s: Session): Etat {
-  return ETATS_SESSION[s.etat] ?? ETATS_SESSION.inactif
+  const etat = ETATS_SESSION[s.etat] ?? ETATS_SESSION.inactif
+  // A followed session (« suivre ») stays in sight once finished.
+  return s.suivi && etat.groupe === 'fini' ? { ...etat, groupe: 'suivi' } : etat
 }
 
 const GARDE_KO = ['failure', 'cancelled', 'timed_out', 'error', 'action_required', 'startup_failure']

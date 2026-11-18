@@ -193,6 +193,11 @@ class Classement(unittest.TestCase):
             ecrire({"type": "user", "message": {"content": [{"type": "text", "text": "[Request interrupted by user]"}]}})
             self.assertNotEqual(collect.classer_session(d, maintenant, trouve)["etat"], "travaille")
 
+    def test_titres_suivis(self):
+        self.assertTrue(collect.est_suivie("MVP : étape 4", ["mvp"]))
+        self.assertFalse(collect.est_suivie("Le MVP", ["MVP"]))
+        self.assertFalse(collect.est_suivie("MVP", []))
+
 
 if __name__ == "__main__":
     unittest.main()

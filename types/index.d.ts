@@ -6,6 +6,8 @@ export type Session = {
   cli?: string
   titre: string
   etat: EtatSession
+  /** Son titre commence par un début à suivre (réglage « suivre ») : finie, elle reste visible dans « Suivi ». */
+  suivi?: boolean
   /** Pourquoi cet état, en une phrase (au survol de la pastille). */
   raison?: string
   detail: string

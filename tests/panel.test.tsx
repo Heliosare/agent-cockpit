@@ -1094,3 +1094,14 @@ test('au survol d\'une pastille : pourquoi cet état', async ($, on) => {
   // Une ligne par carte : aucune ne peut se couper.
   await ui.unmount()
 })
+
+test('une session suivie reste visible une fois finie, dans « Suivi »', async ($, on) => {
+  const snap = { ...SNAP, sessions: SNAP.sessions.map(s => (s.id === 'local_c' ? { ...s, suivi: true } : s)) }
+  await lancer($, on, snap)
+  const ui = await $.ui.mount(pane())
+  expect(await ui.find({ type: 'Text', text: 'SUIVI' })).toBeTruthy()
+  expect(await rangs(ui)).toContain('Vieux')
+  // Elle n'est plus comptée avec les terminées repliées.
+  expect(await ui.find({ key: 'toutes' })).toBeUndefined()
+  await ui.unmount()
+})
