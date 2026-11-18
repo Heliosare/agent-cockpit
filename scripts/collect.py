@@ -193,6 +193,46 @@ def tour_en_cours(d, now, transcriptions=None):
     return ""
 
 
+def derniere_demande(d, transcriptions=None, octets=1048576):
+    """La question que la session a laissée à la personne à la fin de son dernier tour (son dernier
+    « wrap_up » avec une question ou marqué bloquant), ou "" : s'il n'y en a pas, ou si un message est
+    arrivé depuis. Lu dans la fin de la transcription, pour quand le résumé de l'app n'est plus à jour."""
+    cli = d.get("cliSessionId")
+    if not cli:
+        return ""
+    chemins = transcriptions(cli) if transcriptions else glob.glob(os.path.join(HOME, ".claude", "projects", "*", f"{cli}.jsonl"))
+    for chemin in chemins:
+        try:
+            with open(chemin, "rb") as f:
+                f.seek(0, 2)
+                taille = f.tell()
+                f.seek(max(0, taille - octets))
+                lignes = f.read().decode("utf-8", "replace").splitlines()
+        except Exception:
+            continue
+        for ligne in reversed(lignes):
+            if '"user"' not in ligne and "wrap_up" not in ligne:
+                continue
+            try:
+                x = json.loads(ligne)
+            except Exception:
+                continue
+            c = (x.get("message") or {}).get("content")
+            if x.get("type") == "user":
+                blocs = c if isinstance(c, list) else [{"type": "text", "text": c or ""}]
+                # Un vrai message (pas un retour d'outil) après la question : elle n'attend plus.
+                if any(isinstance(b, dict) and b.get("type") == "text" and str(b.get("text") or "").strip() for b in blocs):
+                    return ""
+            elif x.get("type") == "assistant" and isinstance(c, list):
+                for b in c:
+                    if isinstance(b, dict) and b.get("type") == "tool_use" and str(b.get("name") or "").endswith("wrap_up"):
+                        e = b.get("input") or {}
+                        if e.get("ask") or e.get("blocked"):
+                            return str(e.get("ask") or e.get("recap") or "elle attend ta réponse")
+                        return ""
+    return ""
+
+
 def classer_session(d, now, transcriptions=None):
     """Une session de l'app -> ce que le panneau en montre (champs choisis, jamais le fichier brut)."""
     act = d.get("lastActivityAt") or 0
@@ -219,7 +259,14 @@ def classer_session(d, now, transcriptions=None):
     # son dernier message posait encore une question. C'est aussi ce que l'app appelle « done ».
     propres = [p for p in (d.get("prs") or []) if p.get("own")]
     livree = bool(propres) and all((p.get("state") or "").upper() in LIVREES for p in propres)
-    if livree and etat in ("attend toi", "à relire", "inactif"):
+    # Son dernier tour s'est fini sur une question à la personne, il y a moins de trois jours : elle
+    # attend, même si le résumé de l'app n'est plus à jour et même si ses PR sont mergées.
+    demande = ""
+    if etat != "travaille" and act and now - act < 3 * JOUR:
+        demande = derniere_demande(d, transcriptions)
+    if demande:
+        etat, raison = "attend toi", f"son dernier tour s'est fini sur une question pour toi{depuis}"
+    elif livree and etat in ("attend toi", "à relire", "inactif"):
         etat, raison = "fini", "ses PR sont toutes mergées ou fermées"
     return {
         "id": d.get("sessionId"),
@@ -229,7 +276,7 @@ def classer_session(d, now, transcriptions=None):
         "etat": etat,
         # Pourquoi cet état : ce que le panneau dit au survol de la pastille.
         "raison": raison,
-        "detail": masque((s.get("needs_action") or s.get("status_detail") or "")[:140]) if fresh else "",
+        "detail": masque(demande[:140]) if demande else (masque((s.get("needs_action") or s.get("status_detail") or "")[:140]) if fresh else ""),
         "minutes": int((now - act) / 60000) if act else None,
         "activite": act or None,
         "date": date_courte(act),

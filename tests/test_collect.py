@@ -209,6 +209,38 @@ class Classement(unittest.TestCase):
         self.assertFalse(collect.est_suivie("Le MVP", ["MVP"]))
         self.assertFalse(collect.est_suivie("MVP", []))
 
+    def test_pr_mergees_mais_derniere_question_sans_reponse(self):
+        import tempfile, time as t
+        maintenant = t.time() * 1000
+        with tempfile.TemporaryDirectory() as dossier:
+            chemin = os.path.join(dossier, "cli.jsonl")
+            def ecrire(*entrees):
+                open(chemin, "w").write("\n".join(json.dumps(e) for e in entrees) + "\n")
+                os.utime(chemin, (maintenant / 1000 - 3600, maintenant / 1000 - 3600))
+            trouve = lambda cli: [chemin]
+            # Résumé de l'app plus à jour, PR toutes mergées, dernier tour fini sur une demande d'accord.
+            d = session("completed", 3_600_000, [pr("MERGED"), pr("MERGED")], frais=False, cliSessionId="cli")
+            d["lastActivityAt"] = d["lastTurnEdgeAt"] = maintenant - 3_600_000
+            demande = {"type": "assistant", "message": {"stop_reason": "tool_use", "content": [
+                {"type": "tool_use", "id": "w", "name": "mcp__x__wrap_up", "input": {"recap": "…", "ask": "J'applique les étapes sur le serveur ?", "blocked": True}}]}}
+            retour = {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "w"}]}}
+            fin = {"type": "assistant", "message": {"stop_reason": "end_turn", "content": [{"type": "text", "text": "…"}]}}
+            ecrire(demande, retour, fin)
+            r = collect.classer_session(d, maintenant, trouve)
+            self.assertEqual(r["etat"], "attend toi")
+            self.assertEqual(r["detail"], "J'applique les étapes sur le serveur ?")
+            # Un tour fini sans question : la règle « livrée » reprend.
+            ecrire({"type": "assistant", "message": {"stop_reason": "tool_use", "content": [
+                {"type": "tool_use", "id": "w", "name": "mcp__x__wrap_up", "input": {"recap": "fini"}}]}}, retour, fin)
+            self.assertEqual(collect.classer_session(d, maintenant, trouve)["etat"], "fini")
+            # La personne a répondu depuis : elle n'attend plus.
+            ecrire(demande, retour, fin, {"type": "user", "message": {"content": "OK, applique"}})
+            self.assertNotEqual(collect.classer_session(d, maintenant, trouve)["etat"], "attend toi")
+            # Une question vieille de plus de trois jours, PR mergées : c'est du passé.
+            ecrire(demande, retour, fin)
+            d["lastActivityAt"] = d["lastTurnEdgeAt"] = maintenant - 4 * collect.JOUR
+            self.assertEqual(collect.classer_session(d, maintenant, trouve)["etat"], "fini")
+
 
 if __name__ == "__main__":
     unittest.main()
