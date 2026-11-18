@@ -251,7 +251,8 @@ def sessions(cli_id, suivre=()):
             continue
         s = classer_session(d, now)
         s["suivi"] = suivie
-        if d.get("isArchived"):
+        # Archivée mais encore au travail ou en attente de toi : son vrai état prime.
+        if d.get("isArchived") and s["etat"] in ("fini", "inactif"):
             s["etat"], s["raison"] = "fini", "elle est archivée, et gardée ici parce que tu la suis"
         out.append(s)
     rang = {"attend toi": 0, "travaille": 1, "à relire": 2, "fini": 3, "inactif": 4}
