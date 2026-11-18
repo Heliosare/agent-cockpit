@@ -968,8 +968,8 @@ export const register: Register = on => {
         p.prod || p.ownerOk ? (
           <Box flexDirection="row" gap={1} flexShrink={0}>
             {p.prod ? (
-              <Text size="footnote" color="warning">
-                prod
+              <Text size="footnote" color="warning" weight="semibold">
+                {insecable('vers prod')}
               </Text>
             ) : null}
             {p.ownerOk ? (
@@ -980,7 +980,7 @@ export const register: Register = on => {
           </Box>
         ) : null
       // Cells the number and the marks take before the title, gaps included.
-      const place = 7 + (p.prod ? 5 : 0) + (p.ownerOk ? motOk.length : 0)
+      const place = 7 + (p.prod ? 9 : 0) + (p.ownerOk ? motOk.length : 0)
       const lien = <Link href={p.url}>{couper(p.titre, lettres(W - C_FIXE - place))}</Link>
       return {
         marque: p.enMerge ? (

@@ -229,6 +229,8 @@ test('triage par priorité : trois groupes, sessions et PR mélangées, tri par 
   expect(await ui.find({ type: 'Text', text: '3 · CI rouge, conflit ou garde absente' })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: 'TERMINÉ OU ANCIEN' })).toBeUndefined()
 
+  // Une PR vers la branche de production le dit sur sa ligne.
+  expect(await ui.find({ type: 'Text', text: /^vers\sprod$/ })).toBeTruthy()
   // La colonne date et heure, pour les sessions comme pour les PR.
   for (const date of ['12/11 21:19', '17/11 15:37', '17/11 15:34', '11/11 00:14']) {
     expect(await ui.find({ type: 'Text', text: date })).toBeTruthy()
@@ -814,7 +816,7 @@ test('sans branche de production réglée, rien ne parle de prod', async ($, on)
     .map((c: { text: string }) => c.text.replace(/\s/g, ' ').trim())
   expect(cartes).toContain('Cocher les PR prêtes')
   expect(cartes).not.toContain('Cocher les PR prêtes (hors prod)')
-  expect(await ui.find({ type: 'Text', text: /^prod$/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^vers\sprod$/ })).toBeUndefined()
   await ui.press({ key: 'coche-pretes' })
   expect((await ui.find({ key: 'merger' }))?.props.label).toBe('Merger la sélection (2)')
   expect(toasts).toEqual([])
