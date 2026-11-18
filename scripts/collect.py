@@ -243,6 +243,27 @@ def est_suivie(titre, prefixes):
     return any(t.startswith(str(p).strip().lower()) for p in prefixes if str(p).strip())
 
 
+def auteurs_des_pr():
+    """Pour chaque PR, la session qui l'a ouverte (la plus récente), archivée ou non : de quoi résumer
+    le travail derrière une PR. {numéro: {"id", "cli", "activite"}}"""
+    out = {}
+    for f in glob.glob(os.path.join(SESSIONS, "*", "*", "local_*.json")):
+        try:
+            d = json.load(open(f))
+        except Exception:
+            continue
+        if not d.get("cliSessionId"):
+            continue
+        for p in d.get("prs") or []:
+            n = p.get("prNumber")
+            if not p.get("own") or not n:
+                continue
+            act = d.get("lastActivityAt") or 0
+            if str(n) not in out or act > out[str(n)]["activite"]:
+                out[str(n)] = {"id": d.get("sessionId"), "cli": d.get("cliSessionId"), "activite": act}
+    return out
+
+
 def sessions(cli_id, suivre=()):
     out, me = [], {"favori": False}
     now = time.time() * 1000
@@ -616,6 +637,7 @@ def main():
             "avecProd": bool(str(cfg.get("brancheProd") or "").strip())}
     if "--prs" in flags:
         data["prs"] = prs(cfg, jours)
+        data["auteurs"] = auteurs_des_pr()
         data["orphelines"] = orphelines(piles, branches_fermees(cfg))
     if "--sante" in flags:
         data["sante"] = sante(cfg)

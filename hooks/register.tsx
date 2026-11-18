@@ -390,6 +390,7 @@ async function collecter($: EngineInterface, mode: Collecte): Promise<{ favori: 
       prs: avecPrs ? data.prs : old?.prs,
       sante: avecPrs ? data.sante : old?.sante,
       orphelines: avecPrs ? data.orphelines : old?.orphelines,
+      auteurs: avecPrs ? data.auteurs : old?.auteurs,
     }))
     // Only where the pane is shown (it then refreshes on a timer): a session
     // that merely loaded the mod makes no summary.
@@ -619,7 +620,7 @@ const C_MARQUE = 3 // the tick box of a PR, or the mark of a session
 const C_ETAT = 9 // the longest pill, « Travaille », in small semibold type
 const L_ETAT = 9 // on a terminal, a state is padded to this many letters
 const C_DATE = 10 // « jj/mm HH:MM »
-const C_ACTIONS = 9 // two rounded buttons and the gap between
+const C_ACTIONS = 13 // three rounded buttons (summary, test, open) and the gaps between
 // What every row spends beside its title: those columns, the gaps between
 // them, the row's own margins and the frame.
 const C_FIXE = C_MARQUE + C_ETAT + C_DATE + C_ACTIONS + 7
@@ -956,6 +957,17 @@ export const register: Register = on => {
       )
     }
 
+    // Under a PR: the summary of the session that opened it, made in advance
+    // for that session or asked by the press.
+    const resumePr = (p: Pr): Resume | undefined => {
+      const cle = `pr-${p.numero}`
+      if (resumes[cle]) return resumes[cle]
+      if (!(v.ouverts ?? []).includes(cle)) return undefined
+      const auteur = (data.auteurs ?? {})[String(p.numero)]
+      const f = auteur ? (fichesPretes ?? {})[auteur.id] : undefined
+      return f && f.etat !== 'en cours' ? { etat: f.etat, texte: f.texte } : undefined
+    }
+
     const partsPr = (p: Pr) => {
       const estCochee = choisies.includes(p.numero)
       const numero = (
@@ -1016,10 +1028,40 @@ export const register: Register = on => {
         ),
         detail: '',
         date: p.date,
-        resume: undefined as Resume | undefined,
+        resume: resumePr(p),
         reponses: null as JSX.Element | null,
         suite: suitePr(p),
         actions: [
+          // The express summary of the session that opened this PR.
+          ...(data.qct && (data.auteurs ?? {})[String(p.numero)]
+            ? [
+                icone(
+                  `qct-pr-${p.numero}`,
+                  G.resume,
+                  'Résumé express de sa session',
+                  () => {
+                    const cle = `pr-${p.numero}`
+                    const auteur = (data.auteurs ?? {})[String(p.numero)]
+                    if (!auteur) return undefined
+                    const r = resumes[cle]
+                    if (r?.etat === 'en cours') return undefined
+                    if (r) return oublierResume($, cle)
+                    const ouverts = v.ouverts ?? []
+                    const fiche = (fichesPretes ?? {})[auteur.id]
+                    // Already made for its session: the press only shows it.
+                    if (ouverts.includes(cle) || (fiche && fiche.etat === 'pret')) {
+                      return update($, vue, (x: Vue) => {
+                        const o = x.ouverts ?? []
+                        return { ...VUE_DEFAUT, ...x, ouverts: o.includes(cle) ? o.filter(i => i !== cle) : [...o, cle] }
+                      })
+                    }
+                    return resumer($, data.qct ?? '', { id: cle, cli: auteur.cli, titre: '', etat: 'fini', detail: '', minutes: null, favori: false, activite: null, date: '' })
+                  },
+                  'droite',
+                  true,
+                ),
+              ]
+            : []),
           icone(
             `local-${p.numero}`,
             G.tester,

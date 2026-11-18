@@ -82,6 +82,8 @@ export type Snapshot = {
   qct?: string | null
   /** Ports des piles qui tournent alors que la PR de leur worktree est mergée ou fermée, ou que leur dossier n'existe plus. */
   orphelines?: number[]
+  /** Pour chaque PR, la session qui l'a ouverte : de quoi montrer son résumé express sur la ligne de la PR. */
+  auteurs?: Record<string, { id: string; cli: string; activite: number }>
   /** Aucun dépôt GitHub n'est réglé (« repo ») : pas de PR à lister. */
   sansRepo?: boolean
   /** Le label d'une PR approuvée (réglage « labelOk »), pour l'écrire sur sa ligne. */

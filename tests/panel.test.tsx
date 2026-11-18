@@ -1123,3 +1123,25 @@ test('chaque groupe se replie depuis sa bande et se déplie de même', async ($,
   expect(await rangs(ui)).toContain('Release')
   await ui.unmount()
 })
+
+test('résumé express sur une PR : celui de la session qui l\'a ouverte, déjà prêt, le clic ne fait qu\'afficher', async ($, on) => {
+  // #614 a été ouverte par la session d (à relire, donc résumée d'avance) ; #429 par une session archivée.
+  const auteurs = { '614': { id: 'local_d', cli: 'cli-d', activite: 200 }, '429': { id: 'local_z', cli: 'cli-z', activite: 1 } }
+  const { ran, sent } = await lancer($, on, { ...SNAP, auteurs })
+  const qct = () => ran.filter(a => a[0] === '/bin/zsh')
+  const ui = await $.ui.mount(pane())
+  expect((await ui.find({ key: 'qct-pr-614' }))?.props.label).toBe('≡')
+  expect(await ui.find({ key: 'qct-pr-605' })).toBeUndefined()
+  const avant = qct().length
+  await ui.press({ key: 'qct-pr-614' })
+  expect(await ui.find({ type: 'Text', text: '📌 Bug prod : une question attend ta réponse.' })).toBeTruthy()
+  expect(qct()).toHaveLength(avant)
+  await ui.press({ key: 'qct-pr-614' })
+  expect(await ui.find({ type: 'Text', text: /Ne la ferme pas encore/ })).toBeUndefined()
+  // Session archivée, pas de résumé d'avance : le clic le demande pour elle.
+  await ui.press({ key: 'qct-pr-429' })
+  expect(qct().at(-1)?.at(-1)).toBe('cli-z')
+  expect(await ui.find({ type: 'Text', text: /Ne la ferme pas encore/ })).toBeTruthy()
+  expect(sent).toEqual([])
+  await ui.unmount()
+})
