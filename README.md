@@ -81,7 +81,7 @@ Au premier lancement, le panneau pose `~/.claude/agent-cockpit/config.json`. Le 
 | `taches` | Tes boutons : `court` (le texte du bouton), `libelle` (son nom complet) et `texte` (la consigne envoyée à Claude). |
 | `piles` | Les serveurs locaux à toujours montrer : `nom`, `port`, et soit `lanceur` (son nom dans `~/.claude/launch.json`), soit `dossier` et `commande`. Ceux de `launch.json` qui tournent s'ajoutent tout seuls. |
 | `consignes` | Pour réécrire ce que les boutons demandent à Claude : `tester`, `merger`, `lancer` et `ok`. |
-| `suivre` | Des débuts de titre, par exemple `["MVP"]`. Une session dont le titre commence ainsi reste visible une fois terminée, même archivée, dans un groupe « Suivi ». |
+| `suivre` | Des débuts de titre, par exemple `["MVP"]`. Une session dont le titre commence ainsi reste visible une fois terminée, même archivée, dans un groupe « Suivi ». Elle est aussi listée dans son propre panneau. |
 | `reponses` | Les réponses proposées sous une session qui t'a posé une question (par défaut : Oui, Non, Suis ta recommandation). Un clic envoie la réponse à cette session. |
 | `qct` | Le chemin d'un script de résumé (voir plus bas), ou `false` pour s'en passer. |
 

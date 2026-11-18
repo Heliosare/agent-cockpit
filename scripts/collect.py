@@ -242,9 +242,10 @@ def sessions(cli_id, suivre=()):
         except Exception:
             continue
         if d.get("cliSessionId") == cli_id:
-            # La session qui affiche le panneau : inutile de la lister chez elle.
+            # La session qui affiche le panneau : inutile de la lister chez elle, sauf si elle est suivie.
             me = {"favori": bool(d.get("isStarred")), "id": d.get("sessionId")}
-            continue
+            if not est_suivie(d.get("title"), suivre):
+                continue
         # Une session suivie (réglage « suivre ») reste au tableau même finie, même archivée.
         suivie = est_suivie(d.get("title"), suivre)
         if d.get("isArchived") and not suivie:
