@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { CleTri, Consignes, DetailGarde, EtatSession, Fiche, Pile, Pr, Resume, Session, Snapshot, Tache, Tri, Vue } from '../types'
 
-const PANE = 'flybuddy'
+const PANE = 'cockpit'
 // The pane's title, unless the settings give another (« titre »).
 const TITRE = 'Tableau de bord'
 
@@ -23,14 +23,14 @@ const VUE_DEFAUT: Vue = {
 
 // Change a tag when the value's fields change: it declines what an earlier
 // version stored, which outlives a reload.
-const snapshot = atom({ plugin: 'flybuddy-panel', key: 'snapshot' } as const, null as Snapshot | null, {
+const snapshot = atom({ plugin: 'agent-cockpit', key: 'snapshot' } as const, null as Snapshot | null, {
   shape: 'snapshot-6',
 })
 // Express summaries made in advance for the sessions that wait for the
 // person, shared through a file so that two panes do not make them twice.
-const fiches = atom({ plugin: 'flybuddy-panel', key: 'fiches' } as const, {} as Record<string, Fiche>, { shape: 'fiches-1' })
+const fiches = atom({ plugin: 'agent-cockpit', key: 'fiches' } as const, {} as Record<string, Fiche>, { shape: 'fiches-1' })
 
-const vue = atom({ plugin: 'flybuddy-panel', key: 'vue' } as const, VUE_DEFAUT, {
+const vue = atom({ plugin: 'agent-cockpit', key: 'vue' } as const, VUE_DEFAUT, {
   shape: 'vue-10',
 })
 
@@ -45,7 +45,7 @@ const TACHES_DEFAUT: Tache[] = [
   {
     court: 'Nettoyer',
     libelle: 'Nettoyer sessions et worktrees',
-    texte: 'Nettoie ma machine. Note d\'abord l\'espace disque libre.\n1. Archive les sessions Claude terminées.\n2. Liste les worktrees git. Pour chacun dont la PR est mergée ou fermée : arrête ses serveurs locaux (web, API, Redis…), supprime le worktree, puis supprime les bases Postgres de test qu\'il utilisait.\nGarde les piles listées dans ~/.claude/flybuddy-panel/config.json et tout ce qui sert une PR encore ouverte. Ne supprime jamais une base *_dev, ni celles des piles gardées.\n3. Retire de ~/.claude/launch.json les entrées dont le dossier n\'existe plus.\n3 bis. Mets à jour les piles gardées avec la dernière version de leur branche de base, sans écraser une modification locale, et vérifie qu\'elles répondent.\n4. Donne l\'espace disque libre avant et après, et la liste de ce que tu as supprimé.\nNe pousse rien.',
+    texte: 'Nettoie ma machine. Note d\'abord l\'espace disque libre.\n1. Archive les sessions Claude terminées.\n2. Liste les worktrees git. Pour chacun dont la PR est mergée ou fermée : arrête ses serveurs locaux (web, API, Redis…), supprime le worktree, puis supprime les bases Postgres de test qu\'il utilisait.\nGarde les piles listées dans ~/.claude/agent-cockpit/config.json et tout ce qui sert une PR encore ouverte. Ne supprime jamais une base *_dev, ni celles des piles gardées.\n3. Retire de ~/.claude/launch.json les entrées dont le dossier n\'existe plus.\n3 bis. Mets à jour les piles gardées avec la dernière version de leur branche de base, sans écraser une modification locale, et vérifie qu\'elles répondent.\n4. Donne l\'espace disque libre avant et après, et la liste de ce que tu as supprimé.\nNe pousse rien.',
   },
 ]
 
@@ -332,7 +332,7 @@ async function reglages($: EngineInterface): Promise<{ config: string; affichage
     const home = await $.env.get('HOME').catch(() => undefined)
     // No home folder to name: nothing is read or written, the defaults stand.
     if (!home) return { config: '', affichage: '' }
-    dossierReglages = `${home}/.claude/flybuddy-panel`
+    dossierReglages = `${home}/.claude/agent-cockpit`
   }
   return { config: `${dossierReglages}/config.json`, affichage: `${dossierReglages}/affichage.json` }
 }
@@ -394,7 +394,7 @@ async function collecter($: EngineInterface, mode: Collecte): Promise<{ favori: 
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     await update($, snapshot, (old: Snapshot | null) => (old ? { ...old, taches, erreur: msg } : null))
-    $.ui.log(`flybuddy-panel: collecte impossible : ${msg}`, { to: 'debug' })
+    $.ui.log(`agent-cockpit: collecte impossible : ${msg}`, { to: 'debug' })
     return { favori: false }
   }
 }
@@ -411,7 +411,7 @@ async function demarrer($: EngineInterface): Promise<void> {
 
 async function ouvrir($: EngineInterface): Promise<void> {
   const r = await $.ui.open({ id: PANE, title: (await lireConfig($)).titre || TITRE })
-  if (!r.isPlaced) $.ui.log(`flybuddy-panel: panneau non placé : ${r.reason}`, { to: 'debug' })
+  if (!r.isPlaced) $.ui.log(`agent-cockpit: panneau non placé : ${r.reason}`, { to: 'debug' })
 }
 
 // The express summary of a session: the person's own `qct` script, run in a
@@ -630,7 +630,7 @@ const LARGEUR_TABLEAU = 60
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
-    await $.command.register({ name: 'flybuddy', description: 'Ouvrir le panneau (sessions, PR, localhost)' })
+    await $.command.register({ name: 'cockpit', description: 'Ouvrir le panneau (sessions, PR, localhost)' })
     void (async () => {
       const cfg = await lireConfig($)
       const { favori } = await rafraichir($, 'leger')
@@ -644,7 +644,7 @@ export const register: Register = on => {
     return started
   })
 
-  on('command.run', { command: 'flybuddy' }, async $ => {
+  on('command.run', { command: 'cockpit' }, async $ => {
     await ouvrir($)
     await demarrer($)
     void rafraichir($, 'complet')

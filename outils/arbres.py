@@ -20,7 +20,7 @@ APP = moteur()
 snap = json.load(open(snap_path))
 cfg = json.dumps({"ouvrirAuto": "favorites", "taches": snap.get("taches") or [], "consignes": snap.get("consignes") or {}}, ensure_ascii=False)
 tmp = tempfile.mkdtemp(prefix="fb-rendu-")
-dst = os.path.join(tmp, "flybuddy-panel")
+dst = os.path.join(tmp, "agent-cockpit")
 shutil.copytree(mod, dst, ignore=shutil.ignore_patterns("tests", ".git", "__pycache__", ".DS_Store"))
 os.makedirs(os.path.join(dst, "tests"))
 test = '''import { mock, test } from 'claude-code/testing'
@@ -31,7 +31,7 @@ const CONFIG = %s
 test('dump', async ($: any, on: any) => {
   const clock = mock.clock(on, { now: 1_000_000 })
   let opened = 0
-  on('command.register', () => ({ value: { command: 'flybuddy' } }))
+  on('command.register', () => ({ value: { command: 'cockpit' } }))
   on('ui.open', () => { opened += 1; return { value: { isPlaced: true } } })
   on('ui.toast', () => ({ value: undefined }))
   on('ui.log', () => ({ value: undefined }))
@@ -48,7 +48,7 @@ test('dump', async ($: any, on: any) => {
   for (let i = 0; i < 60 && !(opened > 0 && ran.some(a => a.includes('--prs'))); i++) await new Promise<void>(r => setTimeout(() => r(), 5))
   await new Promise<void>(r => setTimeout(() => r(), 20))
   await clock.settle()
-  const ui = await $.ui.mount({ plugin: 'flybuddy-panel', component: 'Pane', requestId: 'flybuddy', surface: 'desktop', props: { title: 'Tableau de bord', isFocused: false, bodyColumns: %d, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} } })
+  const ui = await $.ui.mount({ plugin: 'agent-cockpit', component: 'Pane', requestId: 'cockpit', surface: 'desktop', props: { title: 'Tableau de bord', isFocused: false, bodyColumns: %d, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} } })
   for (const key of %s) await ui.press({ key })
   console.log('ARBRE:' + JSON.stringify(await ui.find({ type: 'Box' })))
   await ui.unmount()

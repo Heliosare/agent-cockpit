@@ -1,5 +1,5 @@
 {
-  "name": "flybuddy-panel",
+  "name": "agent-cockpit",
   "version": "0.2.0",
   "description": "Un panneau à côté du chat : sessions Claude et PR GitHub triées par priorité, tâches répétitives, serveurs locaux",
   "author": {

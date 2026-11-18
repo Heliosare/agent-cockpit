@@ -74,9 +74,9 @@ const CONFIG = JSON.stringify({
 
 function pane(plus: Record<string, unknown> = {}, surface: 'desktop' | 'terminal' = 'desktop') {
   return {
-    plugin: 'flybuddy-panel',
+    plugin: 'agent-cockpit',
     component: 'Pane',
-    requestId: 'flybuddy',
+    requestId: 'cockpit',
     surface,
     props: {
       title: 'Tableau de bord',
@@ -123,7 +123,7 @@ async function lancer(
   // A clock that moves only when the test moves it: the 30-second refresh
   // never fires by itself.
   const clock = mock.clock(on, { now: 1_000_000 })
-  on('command.register', () => ({ value: { command: 'flybuddy' } }))
+  on('command.register', () => ({ value: { command: 'cockpit' } }))
   on('ui.open', (_: unknown, e: { title: string }) => {
     opened += 1
     titres.push(e.title)
@@ -444,7 +444,7 @@ test('chaque icône envoie la bonne consigne, et rien ne part tout seul', async 
   expect(ran.length).toBeGreaterThan(avant)
   expect(ran.filter(a => a[0] === '/usr/bin/python3').at(-1)).toContain('--prs')
   await ui.press({ key: 'config' })
-  expect(ran).toContainEqual(['/usr/bin/open', '-t', '/Users/moi/.claude/flybuddy-panel/config.json'])
+  expect(ran).toContainEqual(['/usr/bin/open', '-t', '/Users/moi/.claude/agent-cockpit/config.json'])
 
   // Le panneau ne lance que la collecte et « open » : ni git, ni gh, ni serveur.
   for (const argv of ran) expect(['/usr/bin/python3', '/usr/bin/open', '/bin/zsh']).toContain(argv[0])
@@ -673,7 +673,7 @@ test("ce qu'une version précédente a gardé est écarté", async ($, on) => {
   await ui.unmount()
 })
 
-test('/flybuddy ouvre le panneau', async ($, on) => {
+test('/cockpit ouvre le panneau', async ($, on) => {
   let opened = 0
   on('ui.open', () => {
     opened += 1
@@ -687,7 +687,7 @@ test('/flybuddy ouvre le panneau', async ($, on) => {
     value: { exitCode: 0, stdout: JSON.stringify(SNAP), stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
   }))
   const r = await $.command.run({
-    command: 'flybuddy',
+    command: 'cockpit',
     args: '',
     origin: { kind: 'composer' },
     presentation: { isFullscreen: true, columns: 120 },
@@ -698,7 +698,7 @@ test('/flybuddy ouvre le panneau', async ($, on) => {
 
 // ---- Ce que chacun règle chez soi : rien n'est écrit en dur dans le mod.
 
-const CONFIG_JSON = '/Users/moi/.claude/flybuddy-panel/config.json'
+const CONFIG_JSON = '/Users/moi/.claude/agent-cockpit/config.json'
 
 test('premier lancement : le fichier de réglages est posé une fois, sans rien de personnel', async ($, on) => {
   const snap = { ...SNAP, sansRepo: true, prs: [], sante: null, labelOk: '' }
@@ -903,7 +903,7 @@ test("sans dossier personnel lisible, le panneau n'écrit nulle part et garde se
     value: { exitCode: 0, stdout: JSON.stringify(SNAP), stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
   }))
   await $.command.run({
-    command: 'flybuddy',
+    command: 'cockpit',
     args: '',
     origin: { kind: 'composer' },
     presentation: { isFullscreen: true, columns: 120 },

@@ -1,14 +1,14 @@
-# flybuddy-panel
+# agent-cockpit
 
 **English** — A Claude Code pane, shown next to the chat in the desktop app: your Claude sessions and the open PRs of a GitHub repo in one table sorted by priority (« À toi » / yours, « En cours » / running, « Bloqué » / blocked), plus your repeated tasks and local servers as buttons. Buttons only send an instruction to Claude or open a link: none merges, pushes or starts a server by itself. The UI is in French.
 
 Install, at a Claude Code prompt in a terminal:
 
 ```
-/plugin install flybuddy-panel --marketplace Heliosare/flybuddy-panel
+/plugin install agent-cockpit --marketplace Heliosare/agent-cockpit
 ```
 
-Then type `/flybuddy`. Settings: `~/.claude/flybuddy-panel/config.json`, created on first run; see `config.example.json`. Needs macOS, the Claude desktop app, `gh` signed in, `/usr/bin/python3`.
+Then type `/cockpit`. Settings: `~/.claude/agent-cockpit/config.json`, created on first run; see `config.example.json`. Needs macOS, the Claude desktop app, `gh` signed in, `/usr/bin/python3`.
 
 Contributions welcome: open an issue, or a pull request with the tests passing (see « Contribuer » below). MIT licence.
 
@@ -46,7 +46,7 @@ Tout se passe sur ton ordinateur. Le panneau lit la liste des sessions de l'app 
 Dans un terminal, à l'invite de Claude Code :
 
 ```
-/plugin install flybuddy-panel --marketplace Heliosare/flybuddy-panel
+/plugin install agent-cockpit --marketplace Heliosare/agent-cockpit
 ```
 
 Réponds `y` pour ajouter la source, puis choisis la portée « user ».
@@ -54,16 +54,16 @@ Réponds `y` pour ajouter la source, puis choisis la portée « user ».
 Depuis un shell :
 
 ```
-claude plugin install flybuddy-panel --marketplace Heliosare/flybuddy-panel
+claude plugin install agent-cockpit --marketplace Heliosare/agent-cockpit
 ```
 
-Dans l'app de bureau, où `/plugin` ne s'exécute pas : clique sur + à côté de la zone de saisie, puis Plugins, « Add marketplace » avec `Heliosare/flybuddy-panel`, puis « Add plugin ».
+Dans l'app de bureau, où `/plugin` ne s'exécute pas : clique sur + à côté de la zone de saisie, puis Plugins, « Add marketplace » avec `Heliosare/agent-cockpit`, puis « Add plugin ».
 
-Ensuite, tape `/flybuddy` dans une session pour ouvrir le panneau.
+Ensuite, tape `/cockpit` dans une session pour ouvrir le panneau.
 
 ## Régler
 
-Au premier lancement, le panneau pose `~/.claude/flybuddy-panel/config.json`. Le crayon ✎ du panneau l'ouvre. Il est relu à chaque rafraîchissement : pas besoin de relancer quoi que ce soit.
+Au premier lancement, le panneau pose `~/.claude/agent-cockpit/config.json`. Le crayon ✎ du panneau l'ouvre. Il est relu à chaque rafraîchissement : pas besoin de relancer quoi que ce soit.
 
 | Réglage | Ce qu'il fait |
 | --- | --- |
@@ -76,7 +76,7 @@ Au premier lancement, le panneau pose `~/.claude/flybuddy-panel/config.json`. Le
 | `brancheProd` | La branche de production. Ses PR portent la marque « prod » et ne se cochent qu'à la main, une par une. |
 | `fuseau` | Le fuseau des dates, par exemple `Europe/Paris`. Vide : celui de l'ordinateur. |
 | `joursAncien` | Après combien de jours sans mise à jour une PR bloquée est rangée avec les terminées (3 par défaut). |
-| `ouvrirAuto` | `favorites` : le panneau s'ouvre tout seul dans les sessions mises en favori. `toujours` : dans toutes. `jamais` : seulement avec `/flybuddy`. |
+| `ouvrirAuto` | `favorites` : le panneau s'ouvre tout seul dans les sessions mises en favori. `toujours` : dans toutes. `jamais` : seulement avec `/cockpit`. |
 | `rafraichirSecondes`, `prsSecondes` | Le rythme : les sessions et les serveurs toutes les 30 s, GitHub toutes les 90 s. |
 | `taches` | Tes boutons : `court` (le texte du bouton), `libelle` (son nom complet) et `texte` (la consigne envoyée à Claude). |
 | `piles` | Les serveurs locaux à toujours montrer : `nom`, `port`, et soit `lanceur` (son nom dans `~/.claude/launch.json`), soit `dossier` et `commande`. Ceux de `launch.json` qui tournent s'ajoutent tout seuls. |
@@ -120,7 +120,7 @@ Une consigne est un texte à trous. Le panneau remplit les trous puis envoie le 
 
 ### Le résumé express
 
-Si un script exécutable se trouve à `~/.claude/skills/qct/qct`, ou au chemin donné par `qct`, chaque session reçoit un bouton ≡. Pour les sessions de « À toi » et celles terminées depuis moins de trois jours, le panneau lance ce script dès que leur tour se termine, une fois par tour, et garde le résultat dans `~/.claude/flybuddy-panel/resumes.json` : le bouton ne fait qu'afficher. Pour les autres sessions, le bouton le lance à la demande. Sans script, pas de bouton.
+Si un script exécutable se trouve à `~/.claude/skills/qct/qct`, ou au chemin donné par `qct`, chaque session reçoit un bouton ≡. Pour les sessions de « À toi » et celles terminées depuis moins de trois jours, le panneau lance ce script dès que leur tour se termine, une fois par tour, et garde le résultat dans `~/.claude/agent-cockpit/resumes.json` : le bouton ne fait qu'afficher. Pour les autres sessions, le bouton le lance à la demande. Sans script, pas de bouton.
 
 ## Développer
 

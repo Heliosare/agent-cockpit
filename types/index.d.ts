@@ -136,7 +136,7 @@ export type Vue = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'flybuddy-panel': {
+    'agent-cockpit': {
       snapshot: Shaped<Snapshot | null>
       vue: Shaped<Vue>
       fiches: Shaped<Record<string, Fiche>>
