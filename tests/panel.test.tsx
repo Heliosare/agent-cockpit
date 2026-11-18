@@ -1105,3 +1105,17 @@ test('une session suivie reste visible une fois finie, dans « Suivi »', async 
   expect(await ui.find({ key: 'toutes' })).toBeUndefined()
   await ui.unmount()
 })
+
+test('chaque groupe se replie depuis sa bande et se déplie de même', async ($, on) => {
+  await lancer($, on)
+  const ui = await $.ui.mount(pane())
+  expect((await ui.find({ key: 'replier-toi' }))?.props.label).toBe('▲\u00a0replier')
+  await ui.press({ key: 'replier-cours' })
+  // La bande reste, avec son compte ; ses lignes disparaissent, les autres groupes ne bougent pas.
+  expect(await ui.find({ type: 'Text', text: 'EN COURS' })).toBeTruthy()
+  expect(await rangs(ui)).toEqual(['Bug prod', 'Autres agents', '#614', '#605', '#429', '#407'])
+  expect((await ui.find({ key: 'replier-cours' }))?.props.label).toBe('▼\u00a0déplier')
+  await ui.press({ key: 'replier-cours' })
+  expect(await rangs(ui)).toContain('Release')
+  await ui.unmount()
+})

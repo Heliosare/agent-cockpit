@@ -19,6 +19,7 @@ const VUE_DEFAUT: Vue = {
   okDemande: {},
   ouverts: [],
   repondu: {},
+  replies: [],
 }
 
 // Change a tag when the value's fields change: it declines what an earlier
@@ -31,7 +32,7 @@ const snapshot = atom({ plugin: 'agent-cockpit', key: 'snapshot' } as const, nul
 const fiches = atom({ plugin: 'agent-cockpit', key: 'fiches' } as const, {} as Record<string, Fiche>, { shape: 'fiches-1' })
 
 const vue = atom({ plugin: 'agent-cockpit', key: 'vue' } as const, VUE_DEFAUT, {
-  shape: 'vue-10',
+  shape: 'vue-11',
 })
 
 // What the pane offers before the person writes their own tasks in the
@@ -1211,6 +1212,7 @@ export const register: Register = on => {
     // and around them.
     const groupe = (g: DefGroupe) => {
       const rangs = duGroupe(g.cle)
+      const plie = (v.replies ?? []).includes(g.cle)
       return (
         <Box key={`groupe-${g.cle}`} flexDirection="column">
           <Box
@@ -1222,19 +1224,26 @@ export const register: Register = on => {
           >
             <Text weight="bold">{g.nom.toUpperCase()}</Text>
             <Text dimColor>{rangs.length > 0 ? `${rangs.length} · ${aideGroupe(g)}` : "rien ne t'attend"}</Text>
-            {g.cle === 'fini' ? (
+            {rangs.length > 0 ? (
               <>
                 <Box flexGrow={1} />
                 <Button
-                  key="replier-fini"
+                  key={`replier-${g.cle}`}
                   plain
-                  label={`${G.monte}${ESPACE}replier`}
-                  onPress={() => void update($, vue, (x: Vue) => ({ ...VUE_DEFAUT, ...x, toutesSessions: false }))}
+                  label={plie ? `${G.descend}${ESPACE}déplier` : `${G.monte}${ESPACE}replier`}
+                  onPress={() =>
+                    void update($, vue, (x: Vue) => {
+                      // « Terminé ou ancien » folds away whole, as its own button does.
+                      if (g.cle === 'fini') return { ...VUE_DEFAUT, ...x, toutesSessions: false }
+                      const replies = x.replies ?? []
+                      return { ...VUE_DEFAUT, ...x, replies: replies.includes(g.cle) ? replies.filter(c => c !== g.cle) : [...replies, g.cle] }
+                    })
+                  }
                 />
               </>
             ) : null}
           </Box>
-          {rangs.length > 0 ? (
+          {rangs.length > 0 && !plie ? (
             <Box flexDirection="column" rowGap="xs" paddingY="xs">
               {rangs.map(ligne)}
             </Box>

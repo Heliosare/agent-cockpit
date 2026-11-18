@@ -130,6 +130,8 @@ export type Vue = {
   pilesArretees: boolean
   /** Les sessions auxquelles une réponse a été envoyée depuis le panneau : le mot envoyé, et l'activité de la session à ce moment. */
   repondu: Record<string, { mot: string; activite: number }>
+  /** Les groupes repliés : seule leur bande reste. */
+  replies: string[]
   /** Les sessions dont le résumé préparé d'avance est affiché sous la ligne. */
   ouverts: string[]
   /** Les PR dont le merge vient d'être demandé, avec l'heure de la demande (ms). */
