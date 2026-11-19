@@ -606,9 +606,22 @@ async function merger($: EngineInterface, choix: Pr[], modele: string): Promise<
 // An answer to a session that waits, sent from the pane to that session. It
 // reaches it as a message from this pane, saying which button the person
 // pressed and for which question: the session decides what it makes of it.
-async function repondre($: EngineInterface, s: Session, mot: string): Promise<void> {
+// What the session recommends answering: the first button it offered with its
+// question, else the « (reco : …) » its express summary quotes.
+function recoDe(s: Session, resume?: string): string {
+  if (s.reco) return s.reco
+  const question = (resume ?? '').split('\n').find(l => l.startsWith('❓')) ?? ''
+  const trouvees = [...question.matchAll(/\(reco : ((?:[^()]|\([^()]*\))*)\)/g)].map(m => (m[1] ?? '').trim()).filter(Boolean)
+  return trouvees.join(' ; ')
+}
+
+// An answer that only points at the recommendation says nothing without one.
+const SUIT_LA_RECO = /recommandation|reco\b/i
+
+async function repondre($: EngineInterface, s: Session, mot: string, reco = ''): Promise<void> {
   const question = s.detail ? ` à ta question « ${s.detail} »` : ''
-  const texte = `Réponse de l'utilisateur${question}, donnée par un bouton de son panneau de bord : ${mot}.`
+  const precise = reco && SUIT_LA_RECO.test(mot) ? ` (celle-ci : « ${reco} »)` : ''
+  const texte = `Réponse de l'utilisateur${question}, donnée par un bouton de son panneau de bord : ${mot}${precise}.`
   try {
     const r = await $.session.send({ to: { sessionId: s.id }, text: texte })
     if (!r.isDelivered) throw new Error(r.reason || 'refusée')
@@ -1158,12 +1171,22 @@ export const register: Register = on => {
           </Text>
         )
       }
+      // Its recommendation, in full, right above the answers: « suis ta
+      // recommandation » is only offered when there is one to read.
+      const f = (fichesPretes ?? {})[s.id]
+      const reco = recoDe(s, f && f.etat === 'pret' && f.activite === s.activite ? f.texte : undefined)
+      const mots = (data.reponses ?? REPONSES_DEFAUT).map((mot, i) => ({ mot, i })).filter(m => reco || !SUIT_LA_RECO.test(m.mot))
       return (
-        <Box flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={1} rowGap="xs">
-          <Text dimColor size="footnote">
-            Répondre :
+        <Box flexDirection="column" rowGap="xs">
+          <Text key={`reco-${s.id}`} size="footnote" dimColor={!reco}>
+            {reco ? `Sa reco : ${reco}` : 'Sa reco : aucune donnée'}
           </Text>
-          {(data.reponses ?? REPONSES_DEFAUT).map((mot, i) => puce(`rep-${s.id}-${i}`, mot, () => repondre($, s, mot)))}
+          <Box flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={1} rowGap="xs">
+            <Text dimColor size="footnote">
+              Répondre :
+            </Text>
+            {mots.map(m => puce(`rep-${s.id}-${m.i}`, m.mot, () => repondre($, s, m.mot, reco)))}
+          </Box>
         </Box>
       )
     }

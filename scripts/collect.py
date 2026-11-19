@@ -193,13 +193,30 @@ def tour_en_cours(d, now, transcriptions=None):
     return ""
 
 
+# Les boutons d'app d'un « wrap_up » n'ont pas de libellé : ce qu'ils font, en clair.
+BOUTONS_APP = {"commit": "commiter", "create_pr": "ouvrir la PR", "merge": "merger", "verify": "vérifier",
+               "fix_ci": "corriger la CI", "address_comments": "traiter les commentaires",
+               "resolve_conflicts": "résoudre les conflits", "archive": "archiver", "new_session": "nouvelle session"}
+
+
+def premier_bouton(entree):
+    """Le premier bouton proposé avec une question : la réponse que la session recommande, ou ""."""
+    actions = entree.get("actions")
+    if not isinstance(actions, list) or not actions or not isinstance(actions[0], dict):
+        return ""
+    a = actions[0]
+    return str(BOUTONS_APP.get(a.get("action") or "") or a.get("label") or "").strip()
+
+
 def derniere_demande(d, transcriptions=None, octets=1048576):
     """La question que la session a laissée à la personne à la fin de son dernier tour (son dernier
     « wrap_up » avec une question ou marqué bloquant), ou "" : s'il n'y en a pas, ou si un message est
-    arrivé depuis. Lu dans la fin de la transcription, pour quand le résumé de l'app n'est plus à jour."""
+    arrivé depuis. Lu dans la fin de la transcription, pour quand le résumé de l'app n'est plus à jour.
+    Rend (question, recommandation) : la recommandation est le premier bouton proposé avec la question,
+    celui que la session met en avant, ou ""."""
     cli = d.get("cliSessionId")
     if not cli:
-        return ""
+        return "", ""
     chemins = transcriptions(cli) if transcriptions else glob.glob(os.path.join(HOME, ".claude", "projects", "*", f"{cli}.jsonl"))
     for chemin in chemins:
         try:
@@ -222,15 +239,15 @@ def derniere_demande(d, transcriptions=None, octets=1048576):
                 blocs = c if isinstance(c, list) else [{"type": "text", "text": c or ""}]
                 # Un vrai message (pas un retour d'outil) après la question : elle n'attend plus.
                 if any(isinstance(b, dict) and b.get("type") == "text" and str(b.get("text") or "").strip() for b in blocs):
-                    return ""
+                    return "", ""
             elif x.get("type") == "assistant" and isinstance(c, list):
                 for b in c:
                     if isinstance(b, dict) and b.get("type") == "tool_use" and str(b.get("name") or "").endswith("wrap_up"):
                         e = b.get("input") or {}
                         if e.get("ask") or e.get("blocked"):
-                            return str(e.get("ask") or e.get("recap") or "elle attend ta réponse")
-                        return ""
-    return ""
+                            return str(e.get("ask") or e.get("recap") or "elle attend ta réponse"), premier_bouton(e)
+                        return "", ""
+    return "", ""
 
 
 def classer_session(d, now, transcriptions=None):
@@ -261,9 +278,9 @@ def classer_session(d, now, transcriptions=None):
     livree = bool(propres) and all((p.get("state") or "").upper() in LIVREES for p in propres)
     # Son dernier tour s'est fini sur une question à la personne, il y a moins de trois jours : elle
     # attend, même si le résumé de l'app n'est plus à jour et même si ses PR sont mergées.
-    demande = ""
+    demande, reco = "", ""
     if etat != "travaille" and act and now - act < 3 * JOUR:
-        demande = derniere_demande(d, transcriptions)
+        demande, reco = derniere_demande(d, transcriptions)
     if demande:
         etat, raison = "attend toi", f"son dernier tour s'est fini sur une question pour toi{depuis}"
     elif livree and etat in ("attend toi", "à relire", "inactif"):
@@ -277,6 +294,8 @@ def classer_session(d, now, transcriptions=None):
         # Pourquoi cet état : ce que le panneau dit au survol de la pastille.
         "raison": raison,
         "detail": masque(demande[:140]) if demande else (masque((s.get("needs_action") or s.get("status_detail") or "")[:140]) if fresh else ""),
+        # Ce que la session recommande de répondre à sa question (le premier bouton qu'elle proposait).
+        "reco": masque(reco[:80]),
         "minutes": int((now - act) / 60000) if act else None,
         "activite": act or None,
         "date": date_courte(act),

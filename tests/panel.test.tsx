@@ -1071,10 +1071,13 @@ test('sans label d\'approbation réglé, pas de bouton', async ($, on) => {
 })
 
 test('répondre depuis le panneau : sous une session qui attend, un bouton par réponse, envoyé à cette session', async ($, on) => {
-  const { envois, sent, toasts } = await lancer($, on)
+  const avecReco = { ...SNAP, sessions: SNAP.sessions.map(s => (s.id === 'local_a' ? { ...s, reco: 'Oui, applique' } : s)) }
+  const { envois, sent, toasts } = await lancer($, on, avecReco)
   const ui = await $.ui.mount(pane())
   // Seulement sous la session qui a posé une question (a), pas sous celle à relire (d).
   expect((await ui.find({ key: 'rep-local_a-0' }))?.props.label).toBe('Oui')
+  // Sa recommandation est écrite en clair au-dessus du bouton qui la suit.
+  expect(await ui.find({ type: 'Text', text: 'Sa reco : Oui, applique' })).toBeTruthy()
   expect((await ui.find({ key: 'rep-local_a-2' }))?.props.label).toBe('Suis ta recommandation')
   expect(await ui.find({ key: 'rep-local_d-0' })).toBeUndefined()
   await ui.press({ key: 'rep-local_a-1' })
@@ -1086,6 +1089,24 @@ test('répondre depuis le panneau : sous une session qui attend, un bouton par r
   expect(sent).toEqual([])
   expect(await ui.find({ type: 'Text', text: 'Réponse envoyée : Non' })).toBeTruthy()
   expect(await ui.find({ key: 'rep-local_a-0' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('suivre la recommandation : la réponse envoyée la cite ; sans recommandation connue, pas de bouton pour la suivre', async ($, on) => {
+  const avecReco = { ...SNAP, sessions: SNAP.sessions.map(s => (s.id === 'local_a' ? { ...s, reco: 'Oui, applique' } : s)) }
+  const { envois } = await lancer($, on, avecReco)
+  const ui = await $.ui.mount(pane())
+  await ui.press({ key: 'rep-local_a-2' })
+  expect(envois[0]?.text).toContain('Suis ta recommandation (celle-ci : « Oui, applique »).')
+  await ui.unmount()
+})
+
+test('sans recommandation connue : le panneau le dit et ne propose pas de la suivre', async ($, on) => {
+  await lancer($, on)
+  const ui = await $.ui.mount(pane())
+  expect(await ui.find({ type: 'Text', text: 'Sa reco : aucune donnée' })).toBeTruthy()
+  expect((await ui.find({ key: 'rep-local_a-0' }))?.props.label).toBe('Oui')
+  expect(await ui.find({ key: 'rep-local_a-2' })).toBeUndefined()
   await ui.unmount()
 })
 

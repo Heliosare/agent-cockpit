@@ -222,13 +222,16 @@ class Classement(unittest.TestCase):
             d = session("completed", 3_600_000, [pr("MERGED"), pr("MERGED")], frais=False, cliSessionId="cli")
             d["lastActivityAt"] = d["lastTurnEdgeAt"] = maintenant - 3_600_000
             demande = {"type": "assistant", "message": {"stop_reason": "tool_use", "content": [
-                {"type": "tool_use", "id": "w", "name": "mcp__x__wrap_up", "input": {"recap": "…", "ask": "J'applique les étapes sur le serveur ?", "blocked": True}}]}}
+                {"type": "tool_use", "id": "w", "name": "mcp__x__wrap_up", "input": {"recap": "…", "ask": "J'applique les étapes sur le serveur ?", "blocked": True,
+                                                                                   "actions": [{"label": "Oui, applique"}, {"label": "Pas maintenant"}]}}]}}
             retour = {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "w"}]}}
             fin = {"type": "assistant", "message": {"stop_reason": "end_turn", "content": [{"type": "text", "text": "…"}]}}
             ecrire(demande, retour, fin)
             r = collect.classer_session(d, maintenant, trouve)
             self.assertEqual(r["etat"], "attend toi")
             self.assertEqual(r["detail"], "J'applique les étapes sur le serveur ?")
+            # Sa recommandation : le premier bouton qu'elle proposait.
+            self.assertEqual(r["reco"], "Oui, applique")
             # Un tour fini sans question : la règle « livrée » reprend.
             ecrire({"type": "assistant", "message": {"stop_reason": "tool_use", "content": [
                 {"type": "tool_use", "id": "w", "name": "mcp__x__wrap_up", "input": {"recap": "fini"}}]}}, retour, fin)

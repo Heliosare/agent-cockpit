@@ -15,6 +15,8 @@ export type Session = {
   /** Pourquoi cet état, en une phrase (au survol de la pastille). */
   raison?: string
   detail: string
+  /** Ce que la session recommande de répondre à sa question, quand elle l'a dit. */
+  reco?: string
   minutes: number | null
   favori: boolean
   /** Dernière activité, en millisecondes (pour trier). */
