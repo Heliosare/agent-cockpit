@@ -623,8 +623,17 @@ async function repondre($: EngineInterface, s: Session, mot: string, reco = ''):
   const precise = reco && SUIT_LA_RECO.test(mot) ? ` (celle-ci : « ${reco} »)` : ''
   const texte = `Réponse de l'utilisateur${question}, donnée par un bouton de son panneau de bord : ${mot}${precise}.`
   try {
-    const r = await $.session.send({ to: { sessionId: s.id }, text: texte })
-    if (!r.isDelivered) throw new Error(r.reason || 'refusée')
+    // A session is addressed by its Claude id; the app's own id is tried after it.
+    const adresses = [s.cli, s.id].filter((a): a is string => Boolean(a))
+    let livree = false
+    for (const sessionId of adresses) {
+      const r = await $.session.send({ to: { sessionId }, text: texte })
+      if (r.isDelivered) {
+        livree = true
+        break
+      }
+    }
+    if (!livree) throw new Error('cette session n’est pas ouverte. Ouvre-la avec ↗ et réponds dedans')
     await update($, vue, (x: Vue) => ({
       ...VUE_DEFAUT,
       ...x,

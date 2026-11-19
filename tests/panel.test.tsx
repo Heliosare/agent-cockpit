@@ -1082,7 +1082,8 @@ test('répondre depuis le panneau : sous une session qui attend, un bouton par r
   expect(await ui.find({ key: 'rep-local_d-0' })).toBeUndefined()
   await ui.press({ key: 'rep-local_a-1' })
   expect(envois).toHaveLength(1)
-  expect(JSON.stringify(envois[0]?.to)).toContain('local_a')
+  // Adressée par l'identifiant Claude de la session, celui sous lequel elle écoute.
+  expect(JSON.stringify(envois[0]?.to)).toContain('cli-a')
   expect(envois[0]?.text).toBe("Réponse de l'utilisateur à ta question « réponds à la question », donnée par un bouton de son panneau de bord : Non.")
   expect(toasts.at(-1)).toBe('Réponse envoyée : Non')
   // Rien ne part vers la session en cours ; les boutons laissent place à ce qui a été envoyé.
