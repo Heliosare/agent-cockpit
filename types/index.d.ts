@@ -67,8 +67,13 @@ export type Pile = {
 /** `court` : le texte du bouton, quand `libelle` est trop long pour une ligne. */
 export type Tache = { libelle: string; texte: string; court?: string }
 
+/** Une chose mise de côté pour plus tard (« a-faire.json »). `pour` : AAAA-MM-JJ. `session` : celle à rouvrir. */
+export type AFaire = { id: string; texte: string; detail?: string; pour?: string; session?: string }
+
 export type Snapshot = {
   sessions: Session[]
+  /** La liste « À faire », montrée dans le groupe épinglé. */
+  aFaire?: AFaire[]
   piles: Pile[]
   autresPiles: number
   /** `worktrees` : `null` quand aucun dépôt local n'est réglé (« depot »). */

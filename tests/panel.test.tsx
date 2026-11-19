@@ -1111,6 +1111,43 @@ test('sans recommandation connue : le panneau le dit et ne propose pas de la sui
   await ui.unmount()
 })
 
+test('« À faire (N) » dans le groupe épinglé : détail, session à rouvrir, « fait » qui retire', async ($, on) => {
+  const notes = [
+    { id: 't1', texte: 'Finir le test à deux comptes', detail: 'Étape 1 puis étape 2', pour: '2030-01-02', session: 'local_a' },
+    { id: 't2', texte: 'Relire la doc' },
+  ]
+  const { ecrits, ran, sent } = await lancer($, on, { ...SNAP, aFaire: notes })
+  // Le fichier de la liste, tel que le disque le garde.
+  ecrits.push({ path: '/Users/moi/.claude/agent-cockpit/a-faire.json', text: JSON.stringify(notes) })
+  const ui = await $.ui.mount(pane())
+  expect(await ui.find({ type: 'Text', text: 'ÉPINGLÉ' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'À FAIRE (2)' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'pour le 02/01' })).toBeTruthy()
+  // Le détail ne s'affiche qu'à la demande.
+  expect(await ui.find({ type: 'Text', text: 'Étape 1 puis étape 2' })).toBeUndefined()
+  await ui.press({ key: 'detail-afaire-t1' })
+  expect(await ui.find({ type: 'Text', text: 'Étape 1 puis étape 2' })).toBeTruthy()
+  await ui.press({ key: 'session-afaire-t1' })
+  expect(ran).toContainEqual(['/usr/bin/open', 'claude://code/continue?session=local_a&source=desktop_action'])
+  // Déjà notée : la session ne propose plus de la noter.
+  expect(await ui.find({ key: 'plus-tard-local_a' })).toBeUndefined()
+  await ui.press({ key: 'fait-afaire-t1' })
+  const ecrit = [...ecrits].reverse().find(e => e.path.endsWith('/a-faire.json'))
+  expect(JSON.parse(ecrit?.text ?? '[]')).toEqual([{ id: 't2', texte: 'Relire la doc' }])
+  expect(sent).toEqual([])
+  await ui.unmount()
+})
+
+test('« + À faire » sous une session qui attend la note pour plus tard, avec sa question', async ($, on) => {
+  const { ecrits, toasts } = await lancer($, on)
+  const ui = await $.ui.mount(pane())
+  await ui.press({ key: 'plus-tard-local_a' })
+  const ecrit = [...ecrits].reverse().find(e => e.path.endsWith('/a-faire.json'))
+  expect(JSON.parse(ecrit?.text ?? '[]')).toMatchObject([{ texte: 'Bug prod', detail: 'réponds à la question', session: 'local_a' }])
+  expect(toasts.at(-1)).toContain('Noté dans « À faire »')
+  await ui.unmount()
+})
+
 test('au survol d\'une pastille : pourquoi cet état', async ($, on) => {
   const snap = { ...SNAP, sessions: SNAP.sessions.map(s => (s.id === 'local_b' ? { ...s, raison: '2 tâches de fond en cours' } : s)) }
   await lancer($, on, snap)

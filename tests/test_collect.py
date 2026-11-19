@@ -244,6 +244,15 @@ class Classement(unittest.TestCase):
             d["lastActivityAt"] = d["lastTurnEdgeAt"] = maintenant - 4 * collect.JOUR
             self.assertEqual(collect.classer_session(d, maintenant, trouve)["etat"], "fini")
 
+    def test_liste_a_faire(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as dossier:
+            self.assertEqual(collect.a_faire(dossier), [])
+            json.dump([{"id": "t1", "texte": " Relancer le test ", "pour": "2030-01-02", "session": "local_x"}, {"texte": ""}, "bruit"],
+                      open(os.path.join(dossier, "a-faire.json"), "w"))
+            self.assertEqual(collect.a_faire(dossier), [
+                {"id": "t1", "texte": "Relancer le test", "detail": "", "pour": "2030-01-02", "session": "local_x"}])
+
     def test_vue_ou_non_depuis_son_dernier_tour(self):
         d = session("completed", HEURE)
         self.assertFalse(self.etat(d)["vu"])  # jamais ouverte

@@ -305,6 +305,23 @@ def classer_session(d, now, transcriptions=None):
     }
 
 
+def a_faire(dossier):
+    """La liste « À faire » de la personne (« a-faire.json », à côté des réglages) : ce qu'elle a mis
+    de côté pour plus tard. Chaque entrée : id, texte, et au besoin detail, pour (AAAA-MM-JJ), session."""
+    try:
+        liste = json.load(open(os.path.join(dossier, "a-faire.json")))
+    except Exception:
+        return []
+    sortie = []
+    for i, x in enumerate(liste if isinstance(liste, list) else []):
+        if not isinstance(x, dict) or not str(x.get("texte") or "").strip():
+            continue
+        sortie.append({"id": str(x.get("id") or i), "texte": str(x["texte"]).strip()[:200],
+                       "detail": str(x.get("detail") or "")[:2000], "pour": str(x.get("pour") or "")[:10],
+                       "session": str(x.get("session") or "")})
+    return sortie
+
+
 def est_suivie(titre, prefixes):
     """Vrai si le titre commence par l'un des débuts à suivre (réglage « suivre »), sans tenir compte de la casse."""
     t = str(titre or "").strip().lower()
@@ -731,6 +748,7 @@ def main():
     data = {"sessions": sess, "moi": me, "piles": piles, "autresPiles": autres,
             "systeme": systeme(cfg), "configErreur": cfg_err, "heure": time.strftime("%H:%M:%S"),
             "sombre": theme_sombre(), "essai": essai_actif(cfg), "qct": chemin_qct(cfg),
+            "aFaire": a_faire(os.path.dirname(cfg_path)),
             "sansRepo": not str(cfg.get("repo") or "").strip(),
             "labelOk": str(cfg.get("labelOk") or "").strip(),
             "avecGarde": bool(str(cfg.get("garde") or "").strip()),

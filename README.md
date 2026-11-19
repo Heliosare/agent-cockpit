@@ -83,6 +83,7 @@ Au premier lancement, le panneau pose `~/.claude/agent-cockpit/config.json`. Le 
 | `consignes` | Pour réécrire ce que les boutons demandent à Claude : `tester`, `merger`, `lancer` et `ok`. |
 | `suivre` | Des débuts de titre, par exemple `["MVP"]`. Une session dont le titre commence ainsi reste visible une fois terminée, même archivée, dans un groupe « Suivi ». Elle est aussi listée dans son propre panneau. |
 | `epingles` | Des sessions à garder tout en haut du tableau, sous un surnom : `[{ "titre": "début du titre", "nom": "Surnom" }]`. |
+| *(fichier `a-faire.json`)* | À côté des réglages : ta liste « À faire (N) », montrée dans le groupe épinglé. `[{ "id": "t1", "texte": "…", "detail": "…", "pour": "AAAA-MM-JJ", "session": "local_…" }]`. Tu l'alimentes par « + À faire » sous une session qui t'attend, par `/cockpit afaire <texte>`, ou en demandant à Claude d'y écrire ; « ✓ » retire une ligne. |
 | `reponses` | Les réponses proposées sous une session qui t'a posé une question (par défaut : Oui, Non, Suis ta recommandation). Un clic envoie la réponse à cette session. |
 | `qct` | Le chemin d'un script de résumé (voir plus bas), ou `false` pour s'en passer. |
 

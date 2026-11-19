@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { CleTri, Consignes, DetailGarde, EtatSession, Fiche, Pile, Pr, Resume, Session, Snapshot, Tache, Tri, Vue } from '../types'
+import type { AFaire, CleTri, Consignes, DetailGarde, EtatSession, Fiche, Pile, Pr, Resume, Session, Snapshot, Tache, Tri, Vue } from '../types'
 
 const PANE = 'cockpit'
 // The pane's title, unless the settings give another (« titre »).
@@ -676,6 +676,40 @@ async function marquerVue($: EngineInterface, s: Session): Promise<void> {
   await rafraichir($, 'leger')
 }
 
+// « À faire »: what the person put aside for later, kept in a file beside the
+// settings (« a-faire.json ») so that every pane, and any session asked to
+// note something, shares one list.
+async function ecrireAFaire($: EngineInterface, changer: (liste: AFaire[]) => AFaire[]): Promise<void> {
+  const { config } = await reglages($)
+  if (!config) return
+  const fichier = config.replace(/config\.json$/, 'a-faire.json')
+  let liste: AFaire[] = []
+  try {
+    const lu = JSON.parse(await $.fs.read(fichier)) as unknown
+    if (Array.isArray(lu)) liste = lu as AFaire[]
+  } catch {
+    liste = []
+  }
+  await $.fs.write(fichier, JSON.stringify(changer(liste), null, 2)).catch(() => undefined)
+  await rafraichir($, 'leger')
+}
+
+async function ajouterAFaire($: EngineInterface, item: Omit<AFaire, 'id'>): Promise<void> {
+  const id = `t${await $.clock.now().catch(() => 0)}`
+  await ecrireAFaire($, liste => [...liste, { id, ...item }])
+  $.ui.toast(`Noté dans « À faire » : ${couper(item.texte, 40)}`)
+}
+
+// « pour le 20/11 », and whether that day has come.
+function echeance(pour: string | undefined, maintenant: number): { texte: string; due: boolean } {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(pour ?? '')
+  if (!m) return { texte: '', due: false }
+  const d = new Date(maintenant)
+  const jour = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const due = maintenant > 0 && (pour ?? '') <= jour
+  return { texte: pour === jour ? "aujourd'hui" : `${due ? 'depuis le' : 'pour le'} ${m[3]}/${m[2]}`, due }
+}
+
 // The one way a button reaches Claude: it sends the instruction as a prompt.
 // Nothing here merges, pushes or starts a server by itself.
 async function envoyer($: EngineInterface, texte: string, libelle: string): Promise<void> {
@@ -725,7 +759,13 @@ export const register: Register = on => {
     return started
   })
 
-  on('command.run', { command: 'cockpit' }, async $ => {
+  on('command.run', { command: 'cockpit' }, async ($, e) => {
+    // « /cockpit afaire <texte> » notes something for later.
+    const note = /^\s*(?:afaire|todo)\s+(.+)$/is.exec((e as { args?: string }).args ?? '')
+    if (note?.[1]) {
+      await ajouterAFaire($, { texte: note[1].trim() })
+      return { text: 'Noté dans « À faire ».' }
+    }
     await ouvrir($)
     await demarrer($)
     void rafraichir($, 'complet')
@@ -845,8 +885,13 @@ export const register: Register = on => {
     const ouvertes = new Set((prsVues ?? []).filter(p => !p.enMerge).map(p => p.numero))
     const choisies = v.selection.filter(n => ouvertes.has(n))
     // « À toi » always shows, even empty; what is finished or stale only on request.
+    const notesAFaire = data.aFaire ?? []
     const groupes = GROUPES.filter(g =>
-      g.cle === 'toi' ? true : g.cle === 'fini' ? v.toutesSessions && nbFinies > 0 : duGroupe(g.cle).length > 0,
+      g.cle === 'toi'
+        ? true
+        : g.cle === 'fini'
+          ? v.toutesSessions && nbFinies > 0
+          : duGroupe(g.cle).length > 0 || (g.cle === 'tete' && notesAFaire.length > 0),
     )
 
     // A state: the mockup's pill, a word in small semibold type on its tint,
@@ -1195,6 +1240,9 @@ export const register: Register = on => {
               Répondre :
             </Text>
             {mots.map(m => puce(`rep-${s.id}-${m.i}`, m.mot, () => repondre($, s, m.mot, reco)))}
+            {notesAFaire.some(a => a.session === s.id)
+              ? null
+              : puce(`plus-tard-${s.id}`, '+ À faire', () => ajouterAFaire($, { texte: s.titre, detail: s.detail, session: s.id }))}
           </Box>
         </Box>
       )
@@ -1344,9 +1392,56 @@ export const register: Register = on => {
 
     // A group: its name in capitals on a band, then its rows with air between
     // and around them.
+    // « À faire (N) », under the pinned sessions: what was put aside, each with
+    // its day, its detail on request, its session to reopen and « fait ».
+    const blocAFaire = () => (
+      <Box key="a-faire" flexDirection="column" rowGap="xs" paddingX={1}>
+        <Text weight="bold" size="footnote">{`À FAIRE (${notesAFaire.length})`}</Text>
+        {notesAFaire.map(a => {
+          const cle = `afaire-${a.id}`
+          const ouvert = (v.ouverts ?? []).includes(cle)
+          const quand = echeance(a.pour, maintenantVue)
+          return (
+            <Box key={cle} flexDirection="column">
+              <Box flexDirection="row" alignItems="center" gap={1}>
+                <Box width={C_MARQUE - 1} flexShrink={0} alignItems="center">
+                  <Text dimColor>☐</Text>
+                </Box>
+                {titreCoupe(a.texte)}
+                {quand.texte ? (
+                  <Text size="footnote" dimColor={!quand.due} color={quand.due ? 'warning' : undefined}>
+                    {quand.texte}
+                  </Text>
+                ) : null}
+                <Box flexShrink={0} flexDirection="row" justifyContent="flex-end" gap="xs">
+                  {a.detail
+                    ? icone(`detail-${cle}`, G.resume, ouvert ? 'Cacher le détail' : 'Voir le détail', () =>
+                        update($, vue, (x: Vue) => {
+                          const o = x.ouverts ?? []
+                          return { ...VUE_DEFAUT, ...x, ouverts: o.includes(cle) ? o.filter(i => i !== cle) : [...o, cle] }
+                        }), 'droite', true)
+                    : null}
+                  {a.session
+                    ? icone(`session-${cle}`, G.ouvrir, 'Ouvrir sa session', () => $.process.run(['/usr/bin/open', lienSession(a.session ?? '')]), 'droite', true)
+                    : null}
+                  {icone(`fait-${cle}`, G.vu, 'Fait : retirer de la liste', () => ecrireAFaire($, liste => liste.filter(x => x.id !== a.id)), 'droite', true)}
+                </Box>
+              </Box>
+              {ouvert && a.detail ? (
+                <Box paddingLeft={C_MARQUE}>
+                  <Text size="footnote">{a.detail}</Text>
+                </Box>
+              ) : null}
+            </Box>
+          )
+        })}
+      </Box>
+    )
+
     const groupe = (g: DefGroupe) => {
       const rangs = duGroupe(g.cle)
       const plie = (v.replies ?? []).includes(g.cle)
+      const notes = g.cle === 'tete' ? notesAFaire.length : 0
       return (
         <Box key={`groupe-${g.cle}`} flexDirection="column">
           <Box
@@ -1357,8 +1452,10 @@ export const register: Register = on => {
             backgroundColor={terminal ? undefined : pal.bande}
           >
             <Text weight="bold">{g.nom.toUpperCase()}</Text>
-            <Text dimColor>{rangs.length > 0 ? `${rangs.length} · ${aideGroupe(g)}` : "rien ne t'attend"}</Text>
-            {rangs.length > 0 ? (
+            <Text dimColor>
+              {rangs.length > 0 ? `${rangs.length} · ${aideGroupe(g)}` : notes > 0 ? `${notes} à faire` : "rien ne t'attend"}
+            </Text>
+            {rangs.length > 0 || notes > 0 ? (
               <>
                 <Box flexGrow={1} />
                 <Button
@@ -1382,6 +1479,7 @@ export const register: Register = on => {
               {rangs.map(ligne)}
             </Box>
           ) : null}
+          {notes > 0 && !plie ? <Box paddingBottom="xs">{blocAFaire()}</Box> : null}
         </Box>
       )
     }
