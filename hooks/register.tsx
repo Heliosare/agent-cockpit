@@ -180,13 +180,14 @@ const CLE_THEME: Record<NomTeinte, string> = {
 
 // The board is sorted by priority: what waits for the person, what runs by
 // itself, what is stuck. What is finished or stale comes last, on request.
-type Groupe = 'toi' | 'cours' | 'bloque' | 'suivi' | 'fini'
+type Groupe = 'toi' | 'cours' | 'bloque' | 'suivi' | 'recent' | 'fini'
 type DefGroupe = { cle: Groupe; nom: string; aide: string }
 const GROUPES: DefGroupe[] = [
   { cle: 'toi', nom: 'À toi', aide: 'ta réponse, ta relecture ou ton merge' },
   { cle: 'suivi', nom: 'Suivi', aide: 'les sessions que tu suis, une fois leur tour fini' },
   { cle: 'cours', nom: 'En cours', aide: "rien à faire pour l'instant" },
   { cle: 'bloque', nom: 'Bloqué', aide: 'CI rouge ou conflit' },
+  { cle: 'recent', nom: 'Terminé depuis peu', aide: 'finies dans les dernières 24 h' },
   { cle: 'fini', nom: 'Terminé ou ancien', aide: 'sessions finies, PR bloquées sans suite depuis des jours' },
 ]
 
@@ -205,7 +206,10 @@ const ETATS_SESSION: Record<EtatSession, Etat> = {
 function etatSession(s: Session): Etat {
   const etat = ETATS_SESSION[s.etat] ?? ETATS_SESSION.inactif
   // A followed session (« suivre ») stays in sight once finished.
-  return s.suivi && etat.groupe === 'fini' ? { ...etat, groupe: 'suivi' } : etat
+  if (s.suivi && etat.groupe === 'fini') return { ...etat, groupe: 'suivi' }
+  // Finished within the day: still in sight, so that nothing just done goes missing.
+  if (s.etat === 'fini' && s.minutes !== null && s.minutes < 24 * 60) return { ...etat, groupe: 'recent' }
+  return etat
 }
 
 const GARDE_KO = ['failure', 'cancelled', 'timed_out', 'error', 'action_required', 'startup_failure']

@@ -27,7 +27,7 @@ function pr(numero: number, maj: number, date: string, plus: Record<string, unkn
 
 function session(id: string, titre: string, etat: string, activite: number, date: string, plus: Record<string, unknown> = {}) {
   // `cli` : l'identifiant Claude de la session, « local_a » -> « cli-a ».
-  return { id, cli: id.replace('local_', 'cli-'), titre, etat, detail: '', minutes: 3, favori: false, activite, date, ...plus }
+  return { id, cli: id.replace('local_', 'cli-'), titre, etat, detail: '', minutes: etat === 'fini' ? 3000 : 3, favori: false, activite, date, ...plus }
 }
 
 const SNAP = {
@@ -1143,5 +1143,17 @@ test('résumé express sur une PR : celui de la session qui l\'a ouverte, déjà
   expect(qct().at(-1)?.at(-1)).toBe('cli-z')
   expect(await ui.find({ type: 'Text', text: /Ne la ferme pas encore/ })).toBeTruthy()
   expect(sent).toEqual([])
+  await ui.unmount()
+})
+
+test('une session finie dans la journée reste visible, dans « Terminé depuis peu »', async ($, on) => {
+  const snap = { ...SNAP, sessions: [...SNAP.sessions, session('local_r', 'Sans suite', 'fini', 60, '17/11 14:00', { minutes: 90 })] }
+  await lancer($, on, snap)
+  const ui = await $.ui.mount(pane())
+  expect(await ui.find({ type: 'Text', text: 'TERMINÉ DEPUIS PEU' })).toBeTruthy()
+  expect(await rangs(ui)).toContain('Sans suite')
+  // La vieille session finie reste repliée avec les anciennes.
+  expect(await rangs(ui)).not.toContain('Vieux')
+  expect((await ui.find({ key: 'toutes' }))?.text).toBe('Voir 1 terminée ou ancienne')
   await ui.unmount()
 })
