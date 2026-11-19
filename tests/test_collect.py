@@ -250,6 +250,30 @@ class Classement(unittest.TestCase):
         self.assertTrue(self.etat(d)["vu"])
         self.assertTrue(self.etat(session("completed", HEURE, isArchived=True))["vu"])  # archivée : jamais « à vérifier »
 
+    def test_marquee_vue_depuis_le_panneau(self):
+        import tempfile, time as t
+        maintenant = int(t.time() * 1000)
+        with tempfile.TemporaryDirectory() as dossier:
+            os.makedirs(os.path.join(dossier, "a", "b"))
+            def poser(nom, cat, **plus):
+                d = session(cat, HEURE, sessionId=nom, **plus)
+                d["lastActivityAt"] = d["lastTurnEdgeAt"] = maintenant - HEURE
+                if cat == "completed":
+                    d["postTurnSummary"]["needs_action"] = ""
+                json.dump(d, open(os.path.join(dossier, "a", "b", f"{nom}.json"), "w"))
+            poser("local_fini", "completed")
+            poser("local_relire", "review_ready")
+            ancien, collect.SESSIONS = collect.SESSIONS, dossier
+            try:
+                etats = lambda vus: {s["id"]: (s["etat"], s["vu"]) for s in collect.sessions("moi", (), vus)[0]}
+                self.assertEqual(etats({}), {"local_fini": ("fini", False), "local_relire": ("à relire", False)})
+                vus = {"local_fini": maintenant - HEURE, "local_relire": maintenant - HEURE}
+                self.assertEqual(etats(vus), {"local_fini": ("fini", True), "local_relire": ("fini", True)})
+                # La session a bougé depuis le clic : la marque ne vaut plus.
+                self.assertEqual(etats({"local_fini": maintenant - 2 * HEURE})["local_fini"], ("fini", False))
+            finally:
+                collect.SESSIONS = ancien
+
 
 if __name__ == "__main__":
     unittest.main()

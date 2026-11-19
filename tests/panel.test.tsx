@@ -136,7 +136,13 @@ async function lancer(
   on('ui.log', () => ({ value: undefined }))
   // The settings file, as a disk keeps it: what is written is what is read next.
   let fichier = config
-  on('fs.read', () => {
+  on('fs.read', (_: unknown, e: { path: string }) => {
+    // Only the settings file exists at first; the others are what the pane wrote.
+    if (!e.path.endsWith('/config.json')) {
+      const ecrit = [...ecrits].reverse().find(x => x.path === e.path)
+      if (!ecrit) throw new Error('ENOENT')
+      return { value: ecrit.text }
+    }
     if (fichier === null) throw new Error('ENOENT')
     return { value: fichier }
   })
@@ -1177,5 +1183,24 @@ test('une session finie que tu n\'as pas ouverte depuis reste dans « À toi »,
   expect(ordre.indexOf('Sans suite')).toBeLessThan(ordre.indexOf('Release'))
   // Celle qui a été vue est avec les terminées récentes, pas dans « À toi ».
   expect(await ui.find({ type: 'Text', text: 'TERMINÉ DEPUIS PEU' })).toBeTruthy()
+  await ui.unmount()
+})
+
+test('« ✓ » marque une session comme vue depuis le tableau, sans l\'ouvrir', async ($, on) => {
+  const snap = { ...SNAP, sessions: [...SNAP.sessions, session('local_n', 'Sans suite', 'fini', 60, '17/11 14:00', { vu: false, minutes: 90 })] }
+  const { ecrits, ran, sent } = await lancer($, on, snap)
+  const ui = await $.ui.mount(pane())
+  // Sur « À vérifier » et « À relire », pas sur une session qui attend une réponse.
+  expect((await ui.find({ key: 'vu-local_n' }))?.props.label).toBe('✓\ufe0e')
+  expect(await ui.find({ key: 'vu-local_d' })).toBeTruthy()
+  expect(await ui.find({ key: 'vu-local_a' })).toBeUndefined()
+  const avant = ran.length
+  await ui.press({ key: 'vu-local_n' })
+  const ecrit = ecrits.find(e => e.path === '/Users/moi/.claude/agent-cockpit/vus.json')
+  expect(JSON.parse(ecrit?.text ?? '{}')).toEqual({ local_n: 60 })
+  // Le panneau relit aussitôt ; rien ne part vers Claude, rien ne s'ouvre.
+  expect(ran.length).toBeGreaterThan(avant)
+  expect(ran.some(a => a[0] === '/usr/bin/open')).toBe(false)
+  expect(sent).toEqual([])
   await ui.unmount()
 })

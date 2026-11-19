@@ -119,6 +119,7 @@ const G = {
   arrete: '○', // ○
   suite: '↳', // ↳
   resume: '≡', // ≡
+  vu: `✓${TEXTE}`, // ✓
   stop: '■', // ■
 } as const
 // A space the surface keeps and never breaks a line at.
@@ -611,6 +612,24 @@ function raisonPr(p: Pr): string {
   if (p.ci === 'vert' && p.garde !== 'ok' && p.garde !== 'non demandée') return 'ses contrôles sont verts, mais la garde n’a pas tourné'
   if (p.ci === 'aucune' && p.garde !== 'non demandée') return 'aucun contrôle n’a tourné'
   return 'ses contrôles sont verts et elle est mergeable'
+}
+
+// « Vue »: the person has checked this session's result from the board. Kept
+// in a file beside the settings, so that every pane agrees; it holds until
+// the session moves again.
+async function marquerVue($: EngineInterface, s: Session): Promise<void> {
+  const { config } = await reglages($)
+  if (!config || !s.activite) return
+  const fichier = config.replace(/config\.json$/, 'vus.json')
+  let vus: Record<string, number> = {}
+  try {
+    vus = JSON.parse(await $.fs.read(fichier)) as Record<string, number>
+  } catch {
+    vus = {}
+  }
+  vus[s.id] = s.activite
+  await $.fs.write(fichier, JSON.stringify(vus)).catch(() => undefined)
+  await rafraichir($, 'leger')
 }
 
 // The one way a button reaches Claude: it sends the instruction as a prompt.
@@ -1155,6 +1174,10 @@ export const register: Register = on => {
                 true,
               ),
             ]
+          : []),
+        // Its result is checked: out of « À toi » without opening it.
+        ...(['À vérifier', 'À relire'].includes(etatSession(s).nom)
+          ? [icone(`vu-${s.id}`, G.vu, 'Marquer comme vue', () => marquerVue($, s), 'droite', true)]
           : []),
         icone(
           `s-${s.id}`,

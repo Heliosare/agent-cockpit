@@ -317,8 +317,10 @@ def etat_fini_non_vu(s):
     return s.get("etat") == "fini" and s.get("vu") is False
 
 
-def sessions(cli_id, suivre=()):
+def sessions(cli_id, suivre=(), vus=None):
+    """`vus` : les sessions marquées « vue » depuis le panneau, {id: activité au moment du clic}."""
     out, me = [], {"favori": False}
+    vus = vus or {}
     now = time.time() * 1000
     for f in glob.glob(os.path.join(SESSIONS, "*", "*", "local_*.json")):
         try:
@@ -340,6 +342,11 @@ def sessions(cli_id, suivre=()):
         s = classer_session(d, now)
         s["suivi"] = suivie
         # Archivée mais encore au travail ou en attente de toi : son vrai état prime.
+        # Marquée « vue » depuis le panneau, et rien de neuf depuis : c'est vu.
+        if vus.get(s["id"]) and vus.get(s["id"]) == s.get("activite"):
+            s["vu"] = True
+            if s["etat"] == "à relire":
+                s["etat"], s["raison"] = "fini", "tu l'as marquée comme vue"
         # La session qui affiche le panneau est sous les yeux de la personne.
         if d.get("cliSessionId") == cli_id:
             s["vu"] = True
@@ -684,7 +691,11 @@ def main():
         jours = 3
     regler_fuseau(cfg.get("fuseau"))
     suivre = cfg.get("suivre") or []
-    sess, me = sessions(cli_id, suivre if isinstance(suivre, list) else [suivre])
+    try:
+        vus = json.load(open(os.path.join(os.path.dirname(cfg_path), "vus.json")))
+    except Exception:
+        vus = {}
+    sess, me = sessions(cli_id, suivre if isinstance(suivre, list) else [suivre], vus if isinstance(vus, dict) else {})
     piles, autres = localhost(cfg, ports_ecoute())
     data = {"sessions": sess, "moi": me, "piles": piles, "autresPiles": autres,
             "systeme": systeme(cfg), "configErreur": cfg_err, "heure": time.strftime("%H:%M:%S"),
