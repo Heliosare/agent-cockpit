@@ -317,7 +317,15 @@ def etat_fini_non_vu(s):
     return s.get("etat") == "fini" and s.get("vu") is False
 
 
-def sessions(cli_id, suivre=(), vus=None):
+def surnom_epingle(titre, epingles):
+    """Le surnom d'une session épinglée en haut du tableau (réglage « epingles » : [{"titre": début, "nom": surnom}]), ou ""."""
+    for e in epingles or []:
+        if isinstance(e, dict) and est_suivie(titre, [e.get("titre")]):
+            return str(e.get("nom") or titre)
+    return ""
+
+
+def sessions(cli_id, suivre=(), vus=None, epingles=None):
     """`vus` : les sessions marquées « vue » depuis le panneau, {id: activité au moment du clic}."""
     out, me = [], {"favori": False}
     vus = vus or {}
@@ -330,10 +338,11 @@ def sessions(cli_id, suivre=(), vus=None):
         if d.get("cliSessionId") == cli_id:
             # La session qui affiche le panneau : inutile de la lister chez elle, sauf si elle est suivie.
             me = {"favori": bool(d.get("isStarred")), "id": d.get("sessionId")}
-            if not est_suivie(d.get("title"), suivre):
+            if not est_suivie(d.get("title"), suivre) and not surnom_epingle(d.get("title"), epingles):
                 continue
         # Une session suivie (réglage « suivre ») reste au tableau même finie, même archivée.
-        suivie = est_suivie(d.get("title"), suivre)
+        surnom = surnom_epingle(d.get("title"), epingles)
+        suivie = est_suivie(d.get("title"), suivre) or bool(surnom)
         if d.get("isArchived") and not suivie:
             continue
         # Archivée et sans activité depuis trois jours : elle a fait son temps, même suivie.
@@ -341,6 +350,9 @@ def sessions(cli_id, suivre=(), vus=None):
             continue
         s = classer_session(d, now)
         s["suivi"] = suivie
+        if surnom:
+            # Épinglée : tout en haut du tableau, sous son surnom.
+            s["epingle"], s["titre"] = True, surnom
         # Archivée mais encore au travail ou en attente de toi : son vrai état prime.
         # Marquée « vue » depuis le panneau, et rien de neuf depuis : c'est vu.
         if vus.get(s["id"]) and vus.get(s["id"]) == s.get("activite"):
@@ -695,7 +707,7 @@ def main():
         vus = json.load(open(os.path.join(os.path.dirname(cfg_path), "vus.json")))
     except Exception:
         vus = {}
-    sess, me = sessions(cli_id, suivre if isinstance(suivre, list) else [suivre], vus if isinstance(vus, dict) else {})
+    sess, me = sessions(cli_id, suivre if isinstance(suivre, list) else [suivre], vus if isinstance(vus, dict) else {}, cfg.get("epingles") if isinstance(cfg.get("epingles"), list) else [])
     piles, autres = localhost(cfg, ports_ecoute())
     data = {"sessions": sess, "moi": me, "piles": piles, "autresPiles": autres,
             "systeme": systeme(cfg), "configErreur": cfg_err, "heure": time.strftime("%H:%M:%S"),

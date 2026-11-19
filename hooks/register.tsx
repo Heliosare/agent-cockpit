@@ -181,9 +181,10 @@ const CLE_THEME: Record<NomTeinte, string> = {
 
 // The board is sorted by priority: what waits for the person, what runs by
 // itself, what is stuck. What is finished or stale comes last, on request.
-type Groupe = 'toi' | 'cours' | 'bloque' | 'suivi' | 'recent' | 'fini'
+type Groupe = 'tete' | 'toi' | 'cours' | 'bloque' | 'suivi' | 'recent' | 'fini'
 type DefGroupe = { cle: Groupe; nom: string; aide: string }
 const GROUPES: DefGroupe[] = [
+  { cle: 'tete', nom: 'Épinglé', aide: 'toujours en haut' },
   { cle: 'toi', nom: 'À toi', aide: 'ta réponse, ta relecture, ta vérification ou ton merge' },
   { cle: 'suivi', nom: 'Suivi', aide: 'les sessions que tu suis, une fois leur tour fini' },
   { cle: 'cours', nom: 'En cours', aide: "rien à faire pour l'instant" },
@@ -205,6 +206,12 @@ const ETATS_SESSION: Record<EtatSession, Etat> = {
 }
 
 function etatSession(s: Session): Etat {
+  // Pinned: always in the first group, whatever its state.
+  if (s.epingle) return { ...etatLibre(s), groupe: 'tete' }
+  return etatLibre(s)
+}
+
+function etatLibre(s: Session): Etat {
   // Finished, and the person has not opened it since: its result is theirs to check.
   if (s.etat === 'fini' && s.vu === false) return { nom: 'À vérifier', teinte: 'violet', rang: 1.5, groupe: 'toi' }
   const etat = ETATS_SESSION[s.etat] ?? ETATS_SESSION.inactif

@@ -274,6 +274,12 @@ class Classement(unittest.TestCase):
             finally:
                 collect.SESSIONS = ancien
 
+    def test_surnom_d_une_session_epinglee(self):
+        epingles = [{"titre": "chef", "nom": "Coordinateur"}]
+        self.assertEqual(collect.surnom_epingle("Chef d'orchestre", epingles), "Coordinateur")
+        self.assertEqual(collect.surnom_epingle("Autre", epingles), "")
+        self.assertEqual(collect.surnom_epingle("Chef", None), "")
+
 
 if __name__ == "__main__":
     unittest.main()

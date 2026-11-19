@@ -1260,3 +1260,12 @@ test('« toujours » : le panneau s\'ouvre dans chaque session, et ne collecte q
   expect(ran.length).toBeGreaterThan(avant)
   await ui.unmount()
 })
+
+test('une session épinglée est tout en haut, quel que soit son état', async ($, on) => {
+  const snap = { ...SNAP, sessions: SNAP.sessions.map(s => (s.id === 'local_c' ? { ...s, titre: 'Sans suite', epingle: true, suivi: true } : s)) }
+  await lancer($, on, snap)
+  const ui = await $.ui.mount(pane())
+  expect(await ui.find({ type: 'Text', text: 'ÉPINGLÉ' })).toBeTruthy()
+  expect((await rangs(ui))[0]).toBe('Sans suite')
+  await ui.unmount()
+})

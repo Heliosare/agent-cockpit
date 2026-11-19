@@ -10,6 +10,8 @@ export type Session = {
   suivi?: boolean
   /** La personne a ouvert la session depuis la fin de son dernier tour. Finie et pas vue : elle reste dans « À toi ». */
   vu?: boolean
+  /** Épinglée tout en haut du tableau, sous un surnom (réglage « epingles »). */
+  epingle?: boolean
   /** Pourquoi cet état, en une phrase (au survol de la pastille). */
   raison?: string
   detail: string
