@@ -76,7 +76,7 @@ Au premier lancement, le panneau pose `~/.claude/agent-cockpit/config.json`. Le 
 | `brancheProd` | La branche de production. Ses PR portent la marque « prod » et ne se cochent qu'à la main, une par une. |
 | `fuseau` | Le fuseau des dates, par exemple `Europe/Paris`. Vide : celui de l'ordinateur. |
 | `joursAncien` | Après combien de jours sans mise à jour une PR bloquée est rangée avec les terminées (3 par défaut). |
-| `ouvrirAuto` | `favorites` : le panneau s'ouvre tout seul dans les sessions mises en favori. `toujours` : dans toutes. `jamais` : seulement avec `/cockpit`. |
+| `ouvrirAuto` | `favorites` : le panneau s'ouvre tout seul dans les sessions mises en favori. `toujours` : dans toutes (il ne collecte que là où il est affiché). `jamais` : seulement avec `/cockpit`. |
 | `rafraichirSecondes`, `prsSecondes` | Le rythme : les sessions et les serveurs toutes les 30 s, GitHub toutes les 90 s. |
 | `taches` | Tes boutons : `court` (le texte du bouton), `libelle` (son nom complet) et `texte` (la consigne envoyée à Claude). |
 | `piles` | Les serveurs locaux à toujours montrer : `nom`, `port`, et soit `lanceur` (son nom dans `~/.claude/launch.json`), soit `dossier` et `commande`. Ceux de `launch.json` qui tournent s'ajoutent tout seuls. |

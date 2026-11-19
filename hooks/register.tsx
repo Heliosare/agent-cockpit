@@ -682,10 +682,15 @@ export const register: Register = on => {
       const cfg = await lireConfig($)
       const { favori } = await rafraichir($, 'leger')
       const mode = cfg.ouvrirAuto ?? 'favorites'
-      if (mode === 'toujours' || (mode === 'favorites' && favori)) {
+      if (mode === 'favorites' && favori) {
         await ouvrir($)
         await demarrer($)
         void rafraichir($, 'complet')
+      } else if (mode === 'toujours') {
+        // In every session: the pane is asked for, but it only starts to
+        // collect once it is drawn, so that a session nobody looks at (an
+        // agent in the background) costs nothing.
+        await ouvrir($)
       }
     })()
     return started
@@ -711,6 +716,8 @@ export const register: Register = on => {
       bodyRows: e.props.scroll.bodyRows,
       viewport: e.viewport ?? null,
     })
+    // First draw of a pane opened without its timer (« toujours »): start it now.
+    if (!polling) void demarrer($).then(() => rafraichir($, 'complet'))
     const chemins = await reglages($)
     const maintenant = await $.clock.now().catch(() => 0)
     if (affichage !== dernierAffichage || maintenant - derniereTrace > 20_000) {

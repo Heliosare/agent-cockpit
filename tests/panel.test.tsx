@@ -1221,3 +1221,42 @@ test('un résumé raté (ligne « (qct : … ) ») n\'est pas gardé comme résu
   expect(qct()).toBeGreaterThan(avant)
   await ui.unmount()
 })
+
+test('« toujours » : le panneau s\'ouvre dans chaque session, et ne collecte qu\'une fois dessiné', async ($, on) => {
+  const ran: string[][] = []
+  let opened = 0
+  mock.env(on, { HOME: '/Users/moi' })
+  const clock = mock.clock(on, { now: 1_000_000 })
+  on('command.register', () => ({ value: { command: 'cockpit' } }))
+  on('ui.open', () => {
+    opened += 1
+    return { value: { isPlaced: false, reason: 'no-surface' } }
+  })
+  on('ui.toast', () => ({ value: undefined }))
+  on('ui.log', () => ({ value: undefined }))
+  on('fs.read', () => ({ value: JSON.stringify({ ouvrirAuto: 'toujours' }) }))
+  on('fs.exists', () => ({ value: true }))
+  on('fs.write', () => ({ value: undefined }))
+  on('session.id', () => ({ value: 'cli-1' }))
+  on('process.run', (_: unknown, e: { argv: readonly string[] }) => {
+    ran.push([...e.argv])
+    const snap = { ...SNAP, moi: { favori: false }, qct: null }
+    return { value: { exitCode: 0, stdout: JSON.stringify(snap), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  on('session.start', (_: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/Users/moi', surface: 'desktop', isInteractive: true })
+  for (let i = 0; i < 60 && opened === 0; i++) await new Promise<void>(r => setTimeout(() => r(), 5))
+  expect(opened).toBe(1)
+  // Une session pas favorite, personne ne regarde : une seule collecte, puis plus rien.
+  await clock.advance(120_000)
+  expect(ran).toHaveLength(1)
+  // Dès que le panneau est dessiné, il se met à jour comme partout.
+  const ui = await $.ui.mount(pane())
+  await new Promise<void>(r => setTimeout(() => r(), 30))
+  await clock.settle()
+  expect(ran.some(a => a.includes('--prs'))).toBe(true)
+  const avant = ran.length
+  await clock.advance(30_000)
+  expect(ran.length).toBeGreaterThan(avant)
+  await ui.unmount()
+})
