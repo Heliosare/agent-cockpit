@@ -281,6 +281,8 @@ def classer_session(d, now, transcriptions=None):
         "activite": act or None,
         "date": date_courte(act),
         "favori": bool(d.get("isStarred")),
+        # La personne a-t-elle ouvert la session depuis la fin de son dernier tour ?
+        "vu": bool(d.get("isArchived")) or (d.get("lastFocusedAt") or 0) >= (edge or act),
     }
 
 
@@ -311,6 +313,10 @@ def auteurs_des_pr():
     return out
 
 
+def etat_fini_non_vu(s):
+    return s.get("etat") == "fini" and s.get("vu") is False
+
+
 def sessions(cli_id, suivre=()):
     out, me = [], {"favori": False}
     now = time.time() * 1000
@@ -334,6 +340,11 @@ def sessions(cli_id, suivre=()):
         s = classer_session(d, now)
         s["suivi"] = suivie
         # Archivée mais encore au travail ou en attente de toi : son vrai état prime.
+        # La session qui affiche le panneau est sous les yeux de la personne.
+        if d.get("cliSessionId") == cli_id:
+            s["vu"] = True
+        if etat_fini_non_vu(s):
+            s["raison"] = "elle a fini, et tu ne l'as pas ouverte depuis"
         if d.get("isArchived") and s["etat"] in ("fini", "inactif"):
             s["etat"], s["raison"] = "fini", "elle est archivée, et gardée ici parce que tu la suis"
         out.append(s)

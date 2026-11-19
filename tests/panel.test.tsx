@@ -222,7 +222,7 @@ test('triage par priorité : trois groupes, sessions et PR mélangées, tri par 
 
   // Les trois groupes, en capitales, avec leur compte ; le quatrième reste caché.
   expect(await ui.find({ type: 'Text', text: 'À TOI' })).toBeTruthy()
-  expect(await ui.find({ type: 'Text', text: '3 · ta réponse, ta relecture ou ton merge' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: '3 · ta réponse, ta relecture, ta vérification ou ton merge' })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: 'EN COURS' })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: "3 · rien à faire pour l'instant" })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: 'BLOQUÉ' })).toBeTruthy()
@@ -345,7 +345,7 @@ test('une vieille PR bloquée est rangée à part ; ce qui t\'attend ne vieillit
   await lancer($, on, snap)
   const ui = await $.ui.mount(pane())
   expect(await ui.find({ type: 'Text', text: /2 sessions t'attendent · 1 à relire · 2 PR prêtes/ })).toBeTruthy()
-  expect(await ui.find({ type: 'Text', text: '5 · ta réponse, ta relecture ou ton merge' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: '5 · ta réponse, ta relecture, ta vérification ou ton merge' })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: "4 · rien à faire pour l'instant" })).toBeTruthy()
   // « Bloqué » ne garde que les blocages récents.
   expect(await ui.find({ type: 'Text', text: '3 · CI rouge, conflit ou garde absente' })).toBeTruthy()
@@ -545,7 +545,7 @@ test("la case de l'en-tête ne coche jamais une PR vers prod", async ($, on) => 
   const ui = await $.ui.mount(pane())
   const label = async (key: string) => (await ui.find({ key }))?.props.label
 
-  expect(await ui.find({ type: 'Text', text: '4 · ta réponse, ta relecture ou ton merge' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: '4 · ta réponse, ta relecture, ta vérification ou ton merge' })).toBeTruthy()
   // La carte de survol de cette case le dit, puisqu'il y a une branche de production.
   const cartes = (await ui.findAll({ type: 'Text' })).filter((t: { props: { color?: string } }) => t.props.color === 'inverseText')
   expect(cartes.map((c: { text: string }) => c.text.replace(/\s/g, ' ').trim())).toContain('Cocher les PR prêtes (hors prod)')
@@ -1155,5 +1155,27 @@ test('une session finie dans la journée reste visible, dans « Terminé depuis 
   // La vieille session finie reste repliée avec les anciennes.
   expect(await rangs(ui)).not.toContain('Vieux')
   expect((await ui.find({ key: 'toutes' }))?.text).toBe('Voir 1 terminée ou ancienne')
+  await ui.unmount()
+})
+
+test('une session finie que tu n\'as pas ouverte depuis reste dans « À toi », « À vérifier » ; vue, elle en sort', async ($, on) => {
+  const snap = {
+    ...SNAP,
+    sessions: [
+      ...SNAP.sessions,
+      session('local_n', 'Sans suite', 'fini', 60, '17/11 14:00', { vu: false, minutes: 90 }),
+      session('local_v', 'Déjà vue', 'fini', 55, '17/11 13:00', { vu: true, minutes: 90 }),
+    ],
+  }
+  await lancer($, on, snap)
+  const ui = await $.ui.mount(pane())
+  expect(await pastille(ui, 'À vérifier')).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: '4 · ta réponse, ta relecture, ta vérification ou ton merge' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /1 à vérifier/ })).toBeTruthy()
+  // Avant « En cours » : elle est bien dans le premier groupe.
+  const ordre = await rangs(ui)
+  expect(ordre.indexOf('Sans suite')).toBeLessThan(ordre.indexOf('Release'))
+  // Celle qui a été vue est avec les terminées récentes, pas dans « À toi ».
+  expect(await ui.find({ type: 'Text', text: 'TERMINÉ DEPUIS PEU' })).toBeTruthy()
   await ui.unmount()
 })

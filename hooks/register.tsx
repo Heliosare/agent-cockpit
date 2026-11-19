@@ -183,7 +183,7 @@ const CLE_THEME: Record<NomTeinte, string> = {
 type Groupe = 'toi' | 'cours' | 'bloque' | 'suivi' | 'recent' | 'fini'
 type DefGroupe = { cle: Groupe; nom: string; aide: string }
 const GROUPES: DefGroupe[] = [
-  { cle: 'toi', nom: 'À toi', aide: 'ta réponse, ta relecture ou ton merge' },
+  { cle: 'toi', nom: 'À toi', aide: 'ta réponse, ta relecture, ta vérification ou ton merge' },
   { cle: 'suivi', nom: 'Suivi', aide: 'les sessions que tu suis, une fois leur tour fini' },
   { cle: 'cours', nom: 'En cours', aide: "rien à faire pour l'instant" },
   { cle: 'bloque', nom: 'Bloqué', aide: 'CI rouge ou conflit' },
@@ -204,6 +204,8 @@ const ETATS_SESSION: Record<EtatSession, Etat> = {
 }
 
 function etatSession(s: Session): Etat {
+  // Finished, and the person has not opened it since: its result is theirs to check.
+  if (s.etat === 'fini' && s.vu === false) return { nom: 'À vérifier', teinte: 'violet', rang: 1.5, groupe: 'toi' }
   const etat = ETATS_SESSION[s.etat] ?? ETATS_SESSION.inactif
   // A followed session (« suivre ») stays in sight once finished.
   if (s.suivi && etat.groupe === 'fini') return { ...etat, groupe: 'suivi' }
@@ -282,10 +284,12 @@ function resume(sessions: readonly Session[], prs: readonly Pr[] | null | undefi
   const compte = (nom: string) => sessions.filter(s => etatSession(s).nom === nom).length
   const attend = compte("T'attend")
   const relire = compte('À relire')
+  const verifier = compte('À vérifier')
   const pretes = (prs ?? []).filter(p => etatPr(p).nom === 'Prête').length
   const parts = [
     attend > 0 ? `${pluriel(attend, 'session')} t'attend${attend > 1 ? 'ent' : ''}` : '',
     relire > 0 ? `${relire} à relire` : '',
+    verifier > 0 ? `${verifier} à vérifier` : '',
     pretes > 0 ? `${pretes} PR prête${pretes > 1 ? 's' : ''}` : '',
   ].filter(Boolean)
   return parts.length > 0 ? parts.join(' · ') : "rien ne t'attend"

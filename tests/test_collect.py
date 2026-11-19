@@ -241,6 +241,15 @@ class Classement(unittest.TestCase):
             d["lastActivityAt"] = d["lastTurnEdgeAt"] = maintenant - 4 * collect.JOUR
             self.assertEqual(collect.classer_session(d, maintenant, trouve)["etat"], "fini")
 
+    def test_vue_ou_non_depuis_son_dernier_tour(self):
+        d = session("completed", HEURE)
+        self.assertFalse(self.etat(d)["vu"])  # jamais ouverte
+        d["lastFocusedAt"] = d["lastTurnEdgeAt"] - 1000
+        self.assertFalse(self.etat(d)["vu"])  # ouverte avant la fin de son tour
+        d["lastFocusedAt"] = d["lastTurnEdgeAt"] + 1000
+        self.assertTrue(self.etat(d)["vu"])
+        self.assertTrue(self.etat(session("completed", HEURE, isArchived=True))["vu"])  # archivée : jamais « à vérifier »
+
 
 if __name__ == "__main__":
     unittest.main()

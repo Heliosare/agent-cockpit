@@ -8,6 +8,8 @@ export type Session = {
   etat: EtatSession
   /** Son titre commence par un début à suivre (réglage « suivre ») : finie, elle reste visible dans « Suivi ». */
   suivi?: boolean
+  /** La personne a ouvert la session depuis la fin de son dernier tour. Finie et pas vue : elle reste dans « À toi ». */
+  vu?: boolean
   /** Pourquoi cet état, en une phrase (au survol de la pastille). */
   raison?: string
   detail: string
