@@ -1204,3 +1204,20 @@ test('« ✓ » marque une session comme vue depuis le tableau, sans l\'ouvrir',
   expect(sent).toEqual([])
   await ui.unmount()
 })
+
+test('un résumé raté (ligne « (qct : … ) ») n\'est pas gardé comme résumé, et il est retenté plus tard', async ($, on) => {
+  const rate = { exitCode: 0, stdout: '📌 Bug prod\n(qct : le modèle n\'a pas répondu : session expirée)\n🕐 hier', stderr: '' }
+  const { ran, clock } = await lancer($, on, SNAP, rate)
+  const qct = () => ran.filter(a => a[0] === '/bin/zsh').length
+  const ui = await $.ui.mount(pane())
+  await ui.press({ key: 'qct-local_a' })
+  expect(await ui.find({ type: 'Text', text: /Résumé impossible : le modèle n'a pas répondu : session expirée/ })).toBeTruthy()
+  // Pas de nouvel essai à chaque rafraîchissement…
+  const avant = qct()
+  await clock.advance(30_000)
+  expect(qct()).toBe(avant)
+  // … mais dix minutes plus tard, oui.
+  await clock.advance(600_000)
+  expect(qct()).toBeGreaterThan(avant)
+  await ui.unmount()
+})

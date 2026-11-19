@@ -439,6 +439,7 @@ async function resumer($: EngineInterface, qct: string, s: Session): Promise<voi
     const run = await $.process.run(['/bin/zsh', '-lc', 'exec "$0" "$1"', qct, s.cli ?? ''], { timeoutMs: 150_000 })
     const texte = run.stdout.trim()
     if (run.exitCode !== 0 || !texte) throw new Error(run.stderr.trim().slice(-160) || 'aucune réponse')
+    if (resumeRate(texte)) throw new Error(resumeRate(texte))
     await poser({ etat: 'pret', texte: texte.slice(0, 1500) })
   } catch (err) {
     await poser({ etat: 'echec', texte: err instanceof Error ? err.message : String(err) })
@@ -448,6 +449,14 @@ async function resumer($: EngineInterface, qct: string, s: Session): Promise<voi
 // The summaries of the sessions in « À toi » are made as soon as their turn
 // ends, one at a time, once per turn: a press then only shows it.
 let preparation = false
+const dernierEssai: Record<string, number> = {}
+
+// The summary script says it failed, without failing itself, with a line
+// « (qct : … ) »: that line is the error, not a summary to keep.
+function resumeRate(texte: string): string {
+  const ligne = texte.split('\n').find(l => l.trim().startsWith('(qct :'))
+  return ligne ? ligne.trim().replace(/^\(qct :\s*/, '').replace(/\)$/, '').slice(0, 160) : ''
+}
 
 // Sessions whose summary is made in advance: those that wait for the person,
 // and those that are finished (a look back at what they did), for three days.
@@ -481,7 +490,12 @@ async function preparerResumes($: EngineInterface, data: Snapshot): Promise<void
     for (const s of aFaire) {
       cache = { ...cache, ...(await lire()) }
       const f = cache[s.id]
-      if (f && f.activite === s.activite && f.etat !== 'en cours') continue
+      // Made already; a failed one is tried again, ten minutes later at the earliest.
+      const essai = dernierEssai[s.id] ?? 0
+      const maintenantEssai = await $.clock.now()
+      if (f && f.activite === s.activite && f.etat === 'pret') continue
+      if (f && f.activite === s.activite && f.etat === 'echec' && maintenantEssai - essai < 600_000) continue
+      dernierEssai[s.id] = maintenantEssai
       // Another pane started it less than three minutes ago: leave it to it.
       const maintenant = await $.clock.now()
       if (f && f.etat === 'en cours' && f.activite === s.activite && maintenant - Number(f.texte || 0) < 180_000) continue
@@ -495,6 +509,7 @@ async function preparerResumes($: EngineInterface, data: Snapshot): Promise<void
         const run = await $.process.run(['/bin/zsh', '-lc', 'exec "$0" "$1"', data.qct, s.cli ?? ''], { timeoutMs: 150_000 })
         const texte = run.stdout.trim()
         if (run.exitCode !== 0 || !texte) throw new Error(run.stderr.trim().slice(-160) || 'aucune réponse')
+        if (resumeRate(texte)) throw new Error(resumeRate(texte))
         await poser({ etat: 'pret', texte: texte.slice(0, 1500), activite: s.activite ?? 0 })
       } catch (err) {
         await poser({ etat: 'echec', texte: err instanceof Error ? err.message : String(err), activite: s.activite ?? 0 })

@@ -121,7 +121,7 @@ Une consigne est un texte à trous. Le panneau remplit les trous puis envoie le 
 
 ### Le résumé express
 
-Si un script exécutable se trouve à `~/.claude/skills/qct/qct`, ou au chemin donné par `qct`, chaque session reçoit un bouton ≡. Pour les sessions de « À toi » et celles terminées depuis moins de trois jours, le panneau lance ce script dès que leur tour se termine, une fois par tour, et garde le résultat dans `~/.claude/agent-cockpit/resumes.json` : le bouton ne fait qu'afficher. Pour les autres sessions, le bouton le lance à la demande. Sans script, pas de bouton.
+Si un script exécutable se trouve à `~/.claude/skills/qct/qct`, ou au chemin donné par `qct`, chaque session reçoit un bouton ≡. Pour les sessions de « À toi » et celles terminées depuis moins de trois jours, le panneau lance ce script dès que leur tour se termine, une fois par tour, et garde le résultat dans `~/.claude/agent-cockpit/resumes.json` : le bouton ne fait qu'afficher. Pour les autres sessions, le bouton le lance à la demande. Si le script imprime une ligne qui commence par `(qct :`, le panneau la prend pour une erreur : il l'affiche, ne garde pas ce résumé et réessaie dix minutes plus tard. Sans script, pas de bouton.
 
 ## Développer
 
