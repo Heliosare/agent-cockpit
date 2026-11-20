@@ -1401,31 +1401,34 @@ export const register: Register = on => {
           const cle = `afaire-${a.id}`
           const ouvert = (v.ouverts ?? []).includes(cle)
           const quand = echeance(a.pour, maintenantVue)
+          const basculer = () =>
+            update($, vue, (x: Vue) => {
+              const o = x.ouverts ?? []
+              return { ...VUE_DEFAUT, ...x, ouverts: o.includes(cle) ? o.filter(i => i !== cle) : [...o, cle] }
+            })
+          // Two lines whatever the width: the text in full, then its day and
+          // its buttons, named, so that none is ever pushed out of a narrow pane.
           return (
-            <Box key={cle} flexDirection="column">
-              <Box flexDirection="row" alignItems="center" gap={1}>
+            <Box key={cle} flexDirection="column" rowGap="xs">
+              <Box flexDirection="row" gap={1}>
                 <Box width={C_MARQUE - 1} flexShrink={0} alignItems="center">
                   <Text dimColor>☐</Text>
                 </Box>
-                {titreCoupe(a.texte)}
+                <Box flexGrow={1} flexShrink={1}>
+                  <Text>{a.texte}</Text>
+                </Box>
+              </Box>
+              <Box paddingLeft={C_MARQUE} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={1} rowGap="xs">
                 {quand.texte ? (
                   <Text size="footnote" dimColor={!quand.due} color={quand.due ? 'warning' : undefined}>
                     {quand.texte}
                   </Text>
                 ) : null}
-                <Box flexShrink={0} flexDirection="row" justifyContent="flex-end" gap="xs">
-                  {a.detail
-                    ? icone(`detail-${cle}`, G.resume, ouvert ? 'Cacher le détail' : 'Voir le détail', () =>
-                        update($, vue, (x: Vue) => {
-                          const o = x.ouverts ?? []
-                          return { ...VUE_DEFAUT, ...x, ouverts: o.includes(cle) ? o.filter(i => i !== cle) : [...o, cle] }
-                        }), 'droite', true)
-                    : null}
-                  {a.session
-                    ? icone(`session-${cle}`, G.ouvrir, 'Ouvrir sa session', () => $.process.run(['/usr/bin/open', lienSession(a.session ?? '')]), 'droite', true)
-                    : null}
-                  {icone(`fait-${cle}`, G.vu, 'Fait : retirer de la liste', () => ecrireAFaire($, liste => liste.filter(x => x.id !== a.id)), 'droite', true)}
-                </Box>
+                {a.session
+                  ? puce(`session-${cle}`, `Ouvrir l’agent ${G.ouvrir}`, () => $.process.run(['/usr/bin/open', lienSession(a.session ?? '')]))
+                  : null}
+                {a.detail ? puce(`detail-${cle}`, ouvert ? 'Cacher le détail' : 'Détail', basculer) : null}
+                {puce(`fait-${cle}`, `${G.vu} Fait`, () => ecrireAFaire($, liste => liste.filter(x => x.id !== a.id)))}
               </Box>
               {ouvert && a.detail ? (
                 <Box paddingLeft={C_MARQUE}>
