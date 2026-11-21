@@ -211,9 +211,25 @@ function etatSession(s: Session): Etat {
   return etatLibre(s)
 }
 
+// A session whose only wait is the merge of its own PR: the PR's row is the
+// thing to act on, the session is not one more task.
+const PARLE_DE_MERGE = /merg|fusion/i
+function attendSaPr(s: Session): boolean {
+  if (!s.prsOuvertes?.length) return false
+  if (s.etat === 'fini') return s.vu === false
+  return s.etat === 'attend toi' && PARLE_DE_MERGE.test(`${s.detail} ${s.reco ?? ''}`)
+}
+function raisonSession(s: Session): string {
+  if (!attendSaPr(s)) return s.raison ?? ''
+  const prs = (s.prsOuvertes ?? []).map(n => `#${n}`).join(', ')
+  return `Rien à faire dans la session : sa PR ${prs} attend ton merge, sur sa propre ligne`
+}
+
 function etatLibre(s: Session): Etat {
+  if (attendSaPr(s)) return { nom: 'Attend PR', teinte: 'gris', rang: 4.5, groupe: 'cours' }
   // Finished, and the person has not opened it since: its result is theirs to check.
-  if (s.etat === 'fini' && s.vu === false) return { nom: 'À vérifier', teinte: 'violet', rang: 1.5, groupe: 'toi' }
+  // Not once its own PRs are all merged: merging them was the check.
+  if (s.etat === 'fini' && s.vu === false && !s.livree) return { nom: 'À vérifier', teinte: 'violet', rang: 1.5, groupe: 'toi' }
   const etat = ETATS_SESSION[s.etat] ?? ETATS_SESSION.inactif
   // A followed session (« suivre ») stays in sight once finished.
   if (s.suivi && etat.groupe === 'fini') return { ...etat, groupe: 'suivi' }
@@ -235,6 +251,8 @@ function etatCourantPr(p: Pr): Etat {
   if (p.enMerge) return { nom: 'Merge…', teinte: 'violet', rang: 3, groupe: 'cours' }
   if (p.brouillon) return { nom: 'Brouillon', teinte: 'gris', rang: 5, groupe: 'cours' }
   if (p.conflit) return { nom: 'Conflit', teinte: 'ambre', rang: 7, groupe: 'bloque' }
+  // Not known yet to merge cleanly: never offered as ready.
+  if (p.calcul) return { nom: 'Vérif…', teinte: 'bleu', rang: 4, groupe: 'cours' }
   if (GARDE_KO.includes(p.garde)) return { nom: 'Garde KO', teinte: 'rouge', rang: 6, groupe: 'bloque' }
   if (p.ci === 'rouge') return { nom: 'CI rouge', teinte: 'rouge', rang: 6, groupe: 'bloque' }
   if (p.ci === 'en cours' || p.garde === 'en cours') return { nom: 'En cours', teinte: 'bleu', rang: 4, groupe: 'cours' }
@@ -586,7 +604,8 @@ async function etatsPr($: EngineInterface, numeros: number[]): Promise<Record<st
 async function merger($: EngineInterface, choix: Pr[], modele: string): Promise<void> {
   const etats = await etatsPr($, choix.map(p => p.numero))
   const faites = choix.filter(p => ['MERGED', 'CLOSED'].includes(etats[String(p.numero)] ?? ''))
-  const reste = choix.filter(p => !faites.includes(p))
+  const conflits = choix.filter(p => etats[String(p.numero)] === 'CONFLIT')
+  const reste = choix.filter(p => !faites.includes(p) && !conflits.includes(p))
   const maintenant = await $.clock.now()
   await update($, vue, (x: Vue) => {
     const enMerge = { ...(x.enMerge ?? {}) }
@@ -594,7 +613,12 @@ async function merger($: EngineInterface, choix: Pr[], modele: string): Promise<
     return { ...VUE_DEFAUT, ...x, selection: [], enMerge }
   })
   dernierPrs = 0
-  const deja = faites.length > 0 ? `déjà mergée${faites.length > 1 ? 's' : ''} ou fermée${faites.length > 1 ? 's' : ''} : ${faites.map(p => `#${p.numero}`).join(', ')}` : ''
+  const deja = [
+    faites.length > 0 ? `déjà mergée${faites.length > 1 ? 's' : ''} ou fermée${faites.length > 1 ? 's' : ''} : ${faites.map(p => `#${p.numero}`).join(', ')}` : '',
+    conflits.length > 0 ? `en conflit, à résoudre d’abord : ${conflits.map(p => `#${p.numero}`).join(', ')}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ; ')
   if (reste.length === 0) {
     $.ui.toast(`Rien à merger, ${deja}.`)
     void rafraichir($, 'complet')
@@ -650,6 +674,7 @@ function raisonPr(p: Pr): string {
   if (p.enMerge) return 'son merge vient d’être demandé à Claude'
   if (p.brouillon) return 'c’est encore un brouillon'
   if (p.conflit) return `elle est en conflit avec ${p.base}`
+  if (p.calcul) return 'GitHub vérifie encore qu’elle se merge sans conflit'
   if (GARDE_KO.includes(p.garde)) return 'le contrôle exigé avant un merge (la garde) est rouge'
   if (p.ci === 'rouge') return 'au moins un contrôle est rouge'
   if (p.ci === 'en cours' || p.garde === 'en cours') return 'ses contrôles tournent encore'
@@ -1030,7 +1055,34 @@ export const register: Register = on => {
     // What differs between a PR and a session: the mark, the title, the icons.
     // Under a PR whose guard is red: the approval button, its confirmation,
     // or « … demandé » once the request is sent, until the guard turns green.
+    // On a ready PR: « Merger… », then a confirmation. As everywhere, the
+    // press only asks Claude; nothing merges from here.
+    const mergePr = (p: Pr): JSX.Element => {
+      const cle = `merge-${p.numero}`
+      const basculer = () =>
+        update($, vue, (x: Vue) => {
+          const o = x.ouverts ?? []
+          return { ...VUE_DEFAUT, ...x, ouverts: o.includes(cle) ? o.filter(i => i !== cle) : [...o, cle] }
+        })
+      if (!(v.ouverts ?? []).includes(cle)) return <Box flexDirection="row">{puce(cle, 'Merger…', basculer)}</Box>
+      return (
+        <Box flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={1} rowGap="xs">
+          <Button
+            key={`merge-confirmer-${p.numero}`}
+            variant="primary"
+            label={`Oui, merger #${p.numero}${p.prod ? ' vers prod' : ''}`}
+            onPress={async () => {
+              await basculer()
+              await merger($, [p], consignes.merger)
+            }}
+          />
+          <Button key={`merge-annuler-${p.numero}`} plain label="Annuler" onPress={() => void basculer()} />
+        </Box>
+      )
+    }
+
     const suitePr = (p: Pr): JSX.Element | null => {
+      if (etatPr(p).nom === 'Prête') return mergePr(p)
       if (!avecOk || p.ownerOk || !GARDE_KO.includes(p.garde)) return null
       if (okEnAttente(p)) {
         return (
@@ -1216,7 +1268,7 @@ export const register: Register = on => {
     // Under a session that asked something: the answers, one press each; then
     // what was sent, until the session moves again.
     const reponsesSession = (s: Session): JSX.Element | null => {
-      if (s.etat !== 'attend toi') return null
+      if (s.etat !== 'attend toi' || attendSaPr(s)) return null
       const r = (v.repondu ?? {})[s.id]
       if (r && r.activite === (s.activite ?? 0)) {
         return (
@@ -1352,7 +1404,7 @@ export const register: Register = on => {
               {parts.titreSeul}
             </Box>
             <Box flexDirection="row" alignItems="center" gap={1} paddingLeft={C_MARQUE + 1}>
-              {pastille(l.etat, l.sorte === 'pr' ? raisonPr(l.p) : (l.s.raison ?? ''), l.cle)}
+              {pastille(l.etat, l.sorte === 'pr' ? raisonPr(l.p) : raisonSession(l.s), l.cle)}
               {parts.sousTitre}
               {date}
               <Box flexGrow={1} />
@@ -1372,7 +1424,7 @@ export const register: Register = on => {
               {parts.marque}
             </Box>
             <Box width={C_ETAT} flexShrink={0} alignItems="center">
-              {pastille(l.etat, l.sorte === 'pr' ? raisonPr(l.p) : (l.s.raison ?? ''), l.cle)}
+              {pastille(l.etat, l.sorte === 'pr' ? raisonPr(l.p) : raisonSession(l.s), l.cle)}
             </Box>
             {parts.titre}
             <Box width={C_DATE} flexShrink={0}>

@@ -17,6 +17,10 @@ export type Session = {
   detail: string
   /** Ce que la session recommande de répondre à sa question, quand elle l'a dit. */
   reco?: string
+  /** Ses propres PR sont toutes mergées ou fermées : finie, elle n'est plus « à vérifier ». */
+  livree?: boolean
+  /** Les numéros de ses propres PR encore ouvertes. */
+  prsOuvertes?: number[]
   minutes: number | null
   favori: boolean
   /** Dernière activité, en millisecondes (pour trier). */
@@ -43,6 +47,8 @@ export type Pr = {
   /** Dernière mise à jour, « jj/mm HH:MM », dans le fuseau réglé (« fuseau ») ou celui de la machine. */
   date: string
   conflit: boolean
+  /** GitHub n'a pas encore dit si elle est mergeable : ni prête ni en conflit pour l'instant. */
+  calcul?: boolean
   /** Son merge vient d'être demandé à Claude : elle ne se coche plus. */
   enMerge?: boolean
   /** Pas mise à jour depuis des jours. Le panneau ne range à part que celles qui seraient « bloquées ». */

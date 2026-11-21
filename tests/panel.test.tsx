@@ -1148,6 +1148,59 @@ test('« + À faire » sous une session qui attend la note pour plus tard, avec 
   await ui.unmount()
 })
 
+test('une PR prête se merge depuis sa ligne, en deux temps ; une PR en conflit n\'est pas demandée', async ($, on) => {
+  const { sent, toasts } = await lancer($, on)
+  const ui = await $.ui.mount(pane())
+  // Seulement sur la PR prête (614), pas sur celle en conflit (429) ni celle qui tourne (501).
+  expect((await ui.find({ key: 'merge-614' }))?.props.label).toBe('Merger…')
+  expect(await ui.find({ key: 'merge-429' })).toBeUndefined()
+  expect(await ui.find({ key: 'merge-501' })).toBeUndefined()
+  await ui.press({ key: 'merge-614' })
+  // Rien ne part avant la confirmation.
+  expect(sent).toEqual([])
+  expect((await ui.find({ key: 'merge-confirmer-614' }))?.props.label).toBe('Oui, merger #614')
+  // Entre-temps elle est passée en conflit sur GitHub : la demande ne part pas, et le panneau le dit.
+  etatsGitHub = { '614': 'CONFLIT' }
+  await ui.press({ key: 'merge-confirmer-614' })
+  expect(sent).toEqual([])
+  expect(toasts.at(-1)).toContain('en conflit, à résoudre d’abord : #614')
+  await ui.unmount()
+})
+
+test('une PR dont GitHub n\'a pas fini de vérifier le merge n\'est pas « Prête »', async ($, on) => {
+  await lancer($, on, { ...SNAP, prs: [pr(614, 300, '17/11 15:34', { calcul: true })] })
+  const ui = await $.ui.mount(pane())
+  expect(await pastille(ui, 'Vérif…')).toBeTruthy()
+  expect(await pastille(ui, 'Prête')).toBeFalsy()
+  expect(await ui.find({ key: 'merge-614' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('une session qui n\'attend que le merge de sa PR n\'est pas une tâche de plus dans « À toi »', async ($, on) => {
+  const snap = {
+    ...SNAP,
+    sessions: [
+      // Finie, jamais ouverte, sa PR 614 encore ouverte.
+      session('local_p', 'Correctif livré', 'fini', 400, '17/11 16:00', { vu: false, prsOuvertes: [614] }),
+      // Elle demande le feu vert de merge : même chose.
+      session('local_q', 'Attend le merge', 'attend toi', 410, '17/11 16:01', { detail: 'PR open, ready for you to merge', prsOuvertes: [614] }),
+      // Finie, jamais ouverte, mais ses PR sont toutes mergées : plus rien à vérifier.
+      session('local_s', 'Déjà mergée', 'fini', 390, '17/11 15:59', { vu: false, livree: true, minutes: 30 }),
+      // Elle pose une autre question : elle attend vraiment.
+      session('local_r', 'Vraie question', 'attend toi', 420, '17/11 16:02', { detail: 'quel texte veux-tu ?', prsOuvertes: [614] }),
+    ],
+  }
+  await lancer($, on, snap)
+  const ui = await $.ui.mount(pane())
+  expect(await pastille(ui, 'À vérifier')).toBeFalsy()
+  // Pas de boutons de réponse sous celle qui n'attend que le merge, mais sous la vraie question oui.
+  expect(await ui.find({ key: 'rep-local_q-0' })).toBeUndefined()
+  expect(await ui.find({ key: 'rep-local_r-0' })).toBeTruthy()
+  const cartes = (await ui.findAll({ type: 'Text' })).map((c: { text: string }) => c.text.replace(/\s/g, ' ').trim())
+  expect(cartes.filter((c: string) => c.includes('sa PR #614 attend ton merge')).length).toBe(2)
+  await ui.unmount()
+})
+
 test('au survol d\'une pastille : pourquoi cet état', async ($, on) => {
   const snap = { ...SNAP, sessions: SNAP.sessions.map(s => (s.id === 'local_b' ? { ...s, raison: '2 tâches de fond en cours' } : s)) }
   await lancer($, on, snap)

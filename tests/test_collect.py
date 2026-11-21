@@ -244,6 +244,13 @@ class Classement(unittest.TestCase):
             d["lastActivityAt"] = d["lastTurnEdgeAt"] = maintenant - 4 * collect.JOUR
             self.assertEqual(collect.classer_session(d, maintenant, trouve)["etat"], "fini")
 
+    def test_ses_pr_encore_ouvertes(self):
+        d = session("completed", HEURE, [pr("OPEN"), pr("MERGED")])
+        self.assertEqual(collect.classer_session(d, NOW)["prsOuvertes"], [1])
+        self.assertFalse(collect.classer_session(d, NOW)["livree"])
+        self.assertTrue(collect.classer_session(session("completed", HEURE, [pr("MERGED")]), NOW)["livree"])
+        self.assertEqual(collect.classer_session(session("completed", HEURE, [pr("OPEN", own=False)]), NOW)["prsOuvertes"], [])
+
     def test_liste_a_faire(self):
         import tempfile
         with tempfile.TemporaryDirectory() as dossier:

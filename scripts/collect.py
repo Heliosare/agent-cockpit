@@ -296,6 +296,10 @@ def classer_session(d, now, transcriptions=None):
         "detail": masque(demande[:140]) if demande else (masque((s.get("needs_action") or s.get("status_detail") or "")[:140]) if fresh else ""),
         # Ce que la session recommande de répondre à sa question (le premier bouton qu'elle proposait).
         "reco": masque(reco[:80]),
+        # Ses propres PR sont toutes mergées ou fermées : les merger, c'était déjà valider son travail.
+        "livree": livree,
+        # Ses propres PR encore ouvertes : quand elle n'attend que leur merge, c'est la ligne de la PR qui compte.
+        "prsOuvertes": [p.get("prNumber") for p in propres if p.get("prNumber") and (p.get("state") or "").upper() == "OPEN"],
         "minutes": int((now - act) / 60000) if act else None,
         "activite": act or None,
         "date": date_courte(act),
@@ -558,6 +562,8 @@ def prs(cfg, jours_ancien=3):
             "date": date_courte(iso_ms(p.get("updatedAt") or "")),
             # UNKNOWN (GitHub n'a pas encore calculé) n'est pas un conflit.
             "conflit": p.get("mergeable") == "CONFLICTING",
+            # GitHub n'a pas encore dit si elle est mergeable (juste après un push ou un merge voisin).
+            "calcul": p.get("mergeable") == "UNKNOWN",
             # Pas touchée depuis des jours. Le panneau ne range à part que celles qui seraient « bloquées ».
             "ancien": est_ancien(iso_ms(p.get("updatedAt") or ""), now, jours_ancien),
         })
@@ -625,16 +631,18 @@ def orphelines(piles, fermees, entrees=None):
 
 
 def etats_pr(cfg, numeros):
-    """L'état sur GitHub (OPEN, MERGED, CLOSED) de chaque PR demandée ; une PR illisible est omise."""
+    """L'état sur GitHub (OPEN, MERGED, CLOSED) de chaque PR demandée, ou CONFLIT pour une PR ouverte
+    en conflit avec sa base ; une PR illisible est omise."""
     repo = str(cfg.get("repo") or "").strip()
     out = {}
     if not repo:
         return out
     for n in numeros[:20]:
-        code, txt = run(["gh", "pr", "view", str(n), "--repo", repo, "--json", "state"], timeout=20)
+        code, txt = run(["gh", "pr", "view", str(n), "--repo", repo, "--json", "state,mergeable"], timeout=20)
         if code == 0:
             try:
-                out[str(n)] = json.loads(txt).get("state", "")
+                x = json.loads(txt)
+                out[str(n)] = "CONFLIT" if x.get("state") == "OPEN" and x.get("mergeable") == "CONFLICTING" else x.get("state", "")
             except Exception:
                 pass
     return out
@@ -755,6 +763,11 @@ def main():
             "avecProd": bool(str(cfg.get("brancheProd") or "").strip())}
     if "--prs" in flags:
         data["prs"] = prs(cfg, jours)
+        # GitHub fait foi : une PR que la liste ne montre plus (mergée, fermée) n'est plus « ouverte ».
+        if data["prs"] is not None:
+            listees = {p["numero"] for p in data["prs"]}
+            for x in sess:
+                x["prsOuvertes"] = [n for n in x.get("prsOuvertes") or [] if n in listees]
         data["auteurs"] = auteurs_des_pr()
         data["orphelines"] = orphelines(piles, branches_fermees(cfg))
     if "--sante" in flags:
